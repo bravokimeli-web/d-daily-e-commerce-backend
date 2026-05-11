@@ -47,6 +47,50 @@ const upload = multer({
   },
 });
 
+/** GET /api/reseller/track?email= — public status lookup (no documents or phone) */
+export const getResellerApplicationStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const raw = (req.query.email as string)?.trim().toLowerCase();
+    if (!raw || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      res.status(400).json({ success: false, message: "Enter a valid email address" });
+      return;
+    }
+
+    const reseller = await Reseller.findOne({ email: raw }).select(
+      "full_name status appliedAt reviewedAt"
+    );
+    if (!reseller) {
+      res.status(404).json({
+        success: false,
+        message:
+          "No application found for this email. Check the spelling, or use the same address you applied with.",
+      });
+      return;
+    }
+
+    const message =
+      reseller.status === "pending"
+        ? "Your application is being reviewed. We typically respond within 2 business days."
+        : reseller.status === "approved"
+          ? "Your application has been approved. Our team will contact you with next steps."
+          : "Your application was not approved at this time. If you have questions, reach out through our contact page.";
+
+    res.json({
+      success: true,
+      data: {
+        full_name: reseller.full_name,
+        status: reseller.status,
+        applied_at: reseller.appliedAt,
+        reviewed_at: reseller.reviewedAt ?? null,
+        message,
+      },
+    });
+  } catch (err) {
+    console.error("Reseller track error:", err);
+    res.status(500).json({ success: false, message: "Unable to look up your application. Try again later." });
+  }
+};
+
 /** POST /api/reseller/apply */
 export const createResellerApplication = async (
   req: Request,

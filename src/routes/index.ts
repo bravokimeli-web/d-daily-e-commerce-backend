@@ -22,6 +22,7 @@ import {
 } from "../controllers/adminController";
 import {
   createResellerApplication,
+  getResellerApplicationStatus,
   getAllResellers,
   getResellerById,
   updateResellerStatus,
@@ -83,6 +84,8 @@ router.get("/admin/me", requireAdmin, getAdminProfile);
 router.get("/admin/dashboard", requireAdmin, getDashboardStats);
 
 // ─── Reseller (public) ────────────────────────────────────────────────────────
+router.get("/reseller/track", getResellerApplicationStatus);
+
 router.post(
   "/reseller/apply-simple",
   (req, res) => {
