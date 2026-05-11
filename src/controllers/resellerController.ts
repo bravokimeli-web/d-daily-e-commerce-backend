@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Reseller } from "../models/Reseller";
-import multer from "multer";
+import multer, { Multer } from "multer";
 import path from "path";
 import fs from "fs";
 
@@ -35,7 +35,7 @@ const upload = multer({
 
 /** POST /api/reseller/apply */
 export const createResellerApplication = async (
-  req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } },
+  req: Request,
   res: Response
 ): Promise<void> => {
   try {
@@ -61,8 +61,9 @@ export const createResellerApplication = async (
 
     // Build document paths from uploaded files
     const documents: any = {};
-    if (req.files && typeof req.files === "object") {
-      Object.entries(req.files).forEach(([fieldName, fileArray]) => {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    if (files && typeof files === "object") {
+      Object.entries(files).forEach(([fieldName, fileArray]) => {
         if (Array.isArray(fileArray) && fileArray.length > 0) {
           documents[fieldName] = `/uploads/reseller-docs/${fileArray[0].filename}`;
         }
