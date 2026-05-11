@@ -1,0 +1,55 @@
+import mongoose, { Document, Schema } from "mongoose";
+
+export type Category = "pest-control" | "lighting" | "home-protection" | "farm-protection";
+
+export interface IProduct extends Document {
+  slug: string;
+  name: string;
+  price: number | null;
+  category: Category;
+  image: string; // URL or path
+  tagline: string;
+  description: string;
+  usage: string[];
+  safety: string[];
+  specs: { label: string; value: string }[];
+  badge?: string;
+  stock: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ProductSchema = new Schema<IProduct>(
+  {
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    price: { type: Number, default: null },
+    category: {
+      type: String,
+      required: true,
+      enum: ["pest-control", "lighting", "home-protection", "farm-protection"],
+    },
+    image: { type: String, required: true },
+    tagline: { type: String, required: true },
+    description: { type: String, required: true },
+    usage: [{ type: String }],
+    safety: [{ type: String }],
+    specs: [
+      {
+        label: { type: String, required: true },
+        value: { type: String, required: true },
+      },
+    ],
+    badge: { type: String },
+    stock: { type: Number, default: 0, min: 0 },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+// Index for fast category filtering and text search
+ProductSchema.index({ category: 1 });
+ProductSchema.index({ name: "text", tagline: "text", description: "text" });
+
+export const Product = mongoose.model<IProduct>("Product", ProductSchema);
