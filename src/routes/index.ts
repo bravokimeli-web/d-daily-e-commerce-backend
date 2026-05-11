@@ -134,14 +134,15 @@ router.get("/admin/resellers/:id", requireAdmin, getResellerById);
 router.patch("/admin/resellers/:id/status", requireAdmin, updateResellerStatus);
 
 // ─── Catch-all for debugging ──────────────────────────────────────────────────
-router.use("*", (req, res) => {
-  console.log(`Catch-all: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ 
-    error: "Route not found", 
-    method: req.method, 
-    path: req.path,
-    originalUrl: req.originalUrl 
-  });
-});
+// Temporarily removed to fix deployment issue
+// router.use("*", (req, res) => {
+//   console.log(`Catch-all: ${req.method} ${req.originalUrl}`);
+//   res.status(404).json({
+//     error: "Route not found",
+//     method: req.method,
+//     path: req.path,
+//     originalUrl: req.originalUrl
+//   });
+// });
 
 export default router;
