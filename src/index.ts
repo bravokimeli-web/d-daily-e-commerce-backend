@@ -69,6 +69,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
 // ─── Routes ────────────────────────────────────────────────────────────────────
+app.use("/api", (req, res, next) => {
+  console.log(`API Request: ${req.method} ${req.path}`, {
+    headers: req.headers,
+    body: req.body
+  });
+  next();
+});
 app.use("/api", routes);
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────

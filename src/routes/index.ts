@@ -43,6 +43,17 @@ router.post("/test", (req, res) => {
   res.json({ success: true, message: "Test successful", body: req.body });
 });
 
+router.get("/debug", (req, res) => {
+  res.json({ 
+    message: "Debug endpoint", 
+    method: req.method, 
+    path: req.path,
+    url: req.url,
+    headers: req.headers,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ─── Products (public) ─────────────────────────────────────────────────────────
 router.get("/products", getAllProducts);
 router.get("/products/:slug", getProductBySlug);
@@ -121,5 +132,16 @@ router.post(
 router.get("/admin/resellers", requireAdmin, getAllResellers);
 router.get("/admin/resellers/:id", requireAdmin, getResellerById);
 router.patch("/admin/resellers/:id/status", requireAdmin, updateResellerStatus);
+
+// ─── Catch-all for debugging ──────────────────────────────────────────────────
+router.use("*", (req, res) => {
+  console.log(`Catch-all: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ 
+    error: "Route not found", 
+    method: req.method, 
+    path: req.path,
+    originalUrl: req.originalUrl 
+  });
+});
 
 export default router;
