@@ -57,7 +57,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('/api/*', cors(corsOptions));
+app.options('/api/:path(*)', cors(corsOptions));
 
 // ─── Body parsing ──────────────────────────────────────────────────────────────
 // Raw body for Paystack webhook signature verification
