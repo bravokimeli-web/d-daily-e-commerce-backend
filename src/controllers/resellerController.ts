@@ -35,7 +35,7 @@ const upload = multer({
 
 /** POST /api/reseller/apply */
 export const createResellerApplication = async (
-  req: Request & { files?: Express.Multer.File[] },
+  req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } },
   res: Response
 ): Promise<void> => {
   try {
@@ -61,10 +61,11 @@ export const createResellerApplication = async (
 
     // Build document paths from uploaded files
     const documents: any = {};
-    if (req.files) {
-      req.files.forEach((file) => {
-        const fieldName = file.fieldname; // id_front, id_back, kra_pin, additional
-        documents[fieldName] = `/uploads/reseller-docs/${file.filename}`;
+    if (req.files && typeof req.files === "object") {
+      Object.entries(req.files).forEach(([fieldName, fileArray]) => {
+        if (Array.isArray(fileArray) && fileArray.length > 0) {
+          documents[fieldName] = `/uploads/reseller-docs/${fileArray[0].filename}`;
+        }
       });
     }
 
