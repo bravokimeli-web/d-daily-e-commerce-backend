@@ -28,6 +28,7 @@ import {
   upload,
 } from "../controllers/resellerController";
 import { requireAdmin } from "../middleware/auth";
+import multer from "multer";
 
 const router = Router();
 
@@ -66,12 +67,31 @@ router.get("/admin/dashboard", requireAdmin, getDashboardStats);
 // ─── Reseller (public) ────────────────────────────────────────────────────────
 router.post(
   "/reseller/apply",
-  upload.fields([
-    { name: "id_front", maxCount: 1 },
-    { name: "id_back", maxCount: 1 },
-    { name: "kra_pin", maxCount: 1 },
-    { name: "additional", maxCount: 1 },
-  ]),
+  (req, res, next) => {
+    const uploadHandler = upload.fields([
+      { name: "id_front", maxCount: 1 },
+      { name: "id_back", maxCount: 1 },
+      { name: "kra_pin", maxCount: 1 },
+      { name: "additional", maxCount: 1 },
+    ]);
+
+    uploadHandler(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        // Multer error (file too large, etc.)
+        return res.status(400).json({
+          success: false,
+          message: err.code === 'LIMIT_FILE_SIZE' ? 'File too large (max 5MB)' : 'File upload error'
+        });
+      } else if (err) {
+        // Custom error (invalid file type, etc.)
+        return res.status(400).json({
+          success: false,
+          message: err.message || 'Invalid file'
+        });
+      }
+      next();
+    });
+  },
   createResellerApplication
 );
 

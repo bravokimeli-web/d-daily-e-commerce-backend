@@ -39,9 +39,12 @@ export const createResellerApplication = async (
   res: Response
 ): Promise<void> => {
   try {
+    console.log("Reseller application request received:", { body: req.body, files: !!req.files });
+
     const { full_name, phone, email } = req.body;
 
     if (!full_name || !phone || !email) {
+      console.log("Missing required fields");
       res.status(400).json({
         success: false,
         message: "Full name, phone, and email are required",
@@ -52,6 +55,7 @@ export const createResellerApplication = async (
     // Check if email already applied
     const existing = await Reseller.findOne({ email: email.toLowerCase() });
     if (existing) {
+      console.log("Email already exists:", email);
       res.status(409).json({
         success: false,
         message: "This email has already applied",
@@ -70,6 +74,8 @@ export const createResellerApplication = async (
       });
     }
 
+    console.log("Creating reseller with documents:", documents);
+
     const reseller = await Reseller.create({
       full_name: full_name.trim(),
       phone: phone.trim(),
@@ -77,6 +83,8 @@ export const createResellerApplication = async (
       documents,
       status: "pending",
     });
+
+    console.log("Reseller created successfully:", reseller._id);
 
     res.status(201).json({
       success: true,
