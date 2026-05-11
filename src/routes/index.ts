@@ -5,6 +5,8 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
+  completeProductImageUpload,
 } from "../controllers/productController";
 import {
   createOrder,
@@ -61,6 +63,12 @@ router.get("/products", getAllProducts);
 router.get("/products/:slug", getProductBySlug);
 
 // ─── Products (admin) ─────────────────────────────────────────────────────────
+router.post(
+  "/admin/products/upload",
+  requireAdmin,
+  uploadProductImage,
+  completeProductImageUpload
+);
 router.post("/admin/products", requireAdmin, createProduct);
 router.put("/admin/products/:slug", requireAdmin, updateProduct);
 router.delete("/admin/products/:slug", requireAdmin, deleteProduct);

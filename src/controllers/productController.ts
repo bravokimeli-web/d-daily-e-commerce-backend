@@ -1,6 +1,66 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { Product } from "../models/Product";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+const productUploadsDir = path.join(process.cwd(), "public", "uploads", "products");
+try {
+  if (!fs.existsSync(productUploadsDir)) fs.mkdirSync(productUploadsDir, { recursive: true });
+} catch (e) {
+  console.error("Could not create product uploads directory:", e);
+}
+
+const productImageMulter = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, productUploadsDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype);
+    if (ok) cb(null, true);
+    else cb(new Error("Only JPEG, PNG, WebP, and GIF files are allowed"));
+  },
+});
+
+/** Multer middleware: field name `image` */
+export const uploadProductImage = (req: Request, res: Response, next: NextFunction): void => {
+  productImageMulter.single("image")(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      res.status(400).json({
+        success: false,
+        message: err.code === "LIMIT_FILE_SIZE" ? "Image too large (max 8MB)" : err.message,
+      });
+      return;
+    }
+    if (err) {
+      res.status(400).json({
+        success: false,
+        message: err instanceof Error ? err.message : "Invalid file",
+      });
+      return;
+    }
+    next();
+  });
+};
+
+/** After uploadProductImage — responds with public path stored on Product.image */
+export const completeProductImageUpload = (req: Request, res: Response): void => {
+  const file = req.file;
+  if (!file?.filename) {
+    res.status(400).json({ success: false, message: "No image file received" });
+    return;
+  }
+  res.status(201).json({
+    success: true,
+    data: { url: `/uploads/products/${file.filename}` },
+  });
+};
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
