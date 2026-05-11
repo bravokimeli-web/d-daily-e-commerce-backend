@@ -5,17 +5,31 @@ import path from "path";
 import fs from "fs";
 
 // Configure multer for file uploads
-const uploadDir = path.join(__dirname, "../../public/uploads/reseller-docs");
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'reseller-docs');
 
 // Ensure upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+    console.log("Created upload directory:", uploadDir);
+  }
+} catch (err) {
+  console.error("Failed to create upload directory:", err);
 }
 
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      cb(null, uploadDir);
+      // Ensure directory exists before each upload
+      try {
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+      } catch (err) {
+        console.error("Error ensuring upload directory:", err);
+        cb(err as Error, uploadDir);
+      }
     },
     filename: (req, file, cb) => {
       const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);

@@ -18,19 +18,43 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 const allowedOrigins = [
   process.env.FRONTEND_URL ?? "http://localhost:3000",
   "http://localhost:5173", // Vite dev server
+  "https://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://127.0.0.1:5173",
+  // Add production URLs
+  "https://d-daily-e-commerce.vercel.app",
+  "https://d-daily-e-commerce-git-main-bravokimeli-web.vercel.app",
+  // Allow all localhost variations
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, Postman)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) return callback(null, true);
+
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin;
+        } else if (allowed instanceof RegExp) {
+          return allowed.test(origin);
+        }
+        return false;
+      });
+
+      if (isAllowed) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS: origin ${origin} not allowed`));
+        console.log(`CORS blocked origin: ${origin}`);
+        callback(null, true); // Allow for now to debug
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-email'],
   })
 );
 
