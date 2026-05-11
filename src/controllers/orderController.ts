@@ -211,13 +211,15 @@ export const getOrder = async (req: Request, res: Response): Promise<void> => {
 /** GET /api/admin/orders  [admin] */
 export const getAllOrders = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { status, page = "1", limit = "20" } = req.query;
+    const status = Array.isArray(req.query.status) ? req.query.status[0] : req.query.status;
+    const page = Array.isArray(req.query.page) ? req.query.page[0] : req.query.page ?? "1";
+    const limit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit ?? "20";
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
 
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     const [orders, total] = await Promise.all([
-      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit as string)),
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
       Order.countDocuments(filter),
     ]);
 
