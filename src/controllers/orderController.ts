@@ -109,9 +109,10 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 };
 
 /** GET /api/orders/verify/:reference — Verify Paystack payment after redirect */
-export const verifyOrder = async (req: Request, res: Response): Promise<void> => {
+export const verifyOrder = async (req: Request<{ reference: string }>, res: Response): Promise<void> => {
   try {
-    const { reference } = req.params;
+    const referenceParam = req.params.reference;
+    const reference = Array.isArray(referenceParam) ? referenceParam[0] : referenceParam;
 
     const verification = await verifyPayment(reference);
 
@@ -195,9 +196,10 @@ export const paystackWebhook = async (req: Request, res: Response): Promise<void
 };
 
 /** GET /api/orders/:orderNumber  [admin or customer self-lookup] */
-export const getOrder = async (req: Request, res: Response): Promise<void> => {
+export const getOrder = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
   try {
-    const order = await Order.findOne({ orderNumber: req.params.orderNumber });
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
+    const order = await Order.findOne({ orderNumber });
     if (!order) {
       res.status(404).json({ success: false, message: "Order not found" });
       return;
@@ -211,15 +213,36 @@ export const getOrder = async (req: Request, res: Response): Promise<void> => {
 /** GET /api/admin/orders  [admin] */
 export const getAllOrders = async (req: Request, res: Response): Promise<void> => {
   try {
-    const status = Array.isArray(req.query.status) ? req.query.status[0] : req.query.status;
-    const page = Array.isArray(req.query.page) ? req.query.page[0] : req.query.page ?? "1";
-    const limit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit ?? "20";
+    const statusQuery = req.query.status as string | string[] | undefined;
+    const pageQuery = req.query.page as string | string[] | undefined;
+    const limitQuery = req.query.limit as string | string[] | undefined;
+
+    const status = Array.isArray(statusQuery)
+      ? statusQuery[0]
+      : typeof statusQuery === "string"
+      ? statusQuery
+      : undefined;
+
+    const page = Array.isArray(pageQuery)
+      ? pageQuery[0]
+      : typeof pageQuery === "string"
+      ? pageQuery
+      : "1";
+
+    const limit = Array.isArray(limitQuery)
+      ? limitQuery[0]
+      : typeof limitQuery === "string"
+      ? limitQuery
+      : "20";
+
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+    const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (pageNumber - 1) * limitNumber;
     const [orders, total] = await Promise.all([
-      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNumber),
       Order.countDocuments(filter),
     ]);
 
@@ -228,9 +251,9 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
       data: orders,
       pagination: {
         total,
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
-        pages: Math.ceil(total / parseInt(limit as string)),
+        page: pageNumber,
+        limit: limitNumber,
+        pages: Math.ceil(total / limitNumber),
       },
     });
   } catch (err) {
@@ -239,7 +262,7 @@ export const getAllOrders = async (req: Request, res: Response): Promise<void> =
 };
 
 /** PATCH /api/admin/orders/:orderNumber/status  [admin] */
-export const updateOrderStatus = async (req: Request, res: Response): Promise<void> => {
+export const updateOrderStatus = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
   try {
     const validStatuses = ["pending_payment", "paid", "processing", "shipped", "delivered", "cancelled", "refunded"];
     const { status } = req.body;
@@ -249,8 +272,9 @@ export const updateOrderStatus = async (req: Request, res: Response): Promise<vo
       return;
     }
 
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
     const order = await Order.findOneAndUpdate(
-      { orderNumber: req.params.orderNumber },
+      { orderNumber },
       { $set: { status } },
       { new: true }
     );
