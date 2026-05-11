@@ -3,15 +3,21 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import path from "path";
 import { connectDB } from "./config/db";
 import routes from "./routes";
+import { UPLOADS_DIR } from "./paths";
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
 
 // ─── Security & logging ────────────────────────────────────────────────────────
-app.use(helmet());
+// Allow storefront (e.g. Vercel) to display uploaded images from `<img src="https://api…/uploads/…">`.
+// Default CORP is same-origin and blocks cross-site embedding of static files.
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────
@@ -67,7 +73,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Static files ──────────────────────────────────────────────────────────────
-app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
+app.use("/uploads", express.static(UPLOADS_DIR));
 
 // ─── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api", (req, res, next) => {

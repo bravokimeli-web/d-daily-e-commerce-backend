@@ -4,8 +4,9 @@ import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { UPLOADS_DIR } from "../paths";
 
-const productUploadsDir = path.join(process.cwd(), "public", "uploads", "products");
+const productUploadsDir = path.join(UPLOADS_DIR, "products");
 try {
   if (!fs.existsSync(productUploadsDir)) fs.mkdirSync(productUploadsDir, { recursive: true });
 } catch (e) {

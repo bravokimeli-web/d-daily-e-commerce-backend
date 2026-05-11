@@ -3,9 +3,10 @@ import { Reseller } from "../models/Reseller";
 import multer, { Multer } from "multer";
 import path from "path";
 import fs from "fs";
+import { UPLOADS_DIR } from "../paths";
 
-// Configure multer for file uploads
-const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'reseller-docs');
+// Configure multer for file uploads (must match `express.static` for `/uploads`)
+const uploadDir = path.join(UPLOADS_DIR, "reseller-docs");
 
 // Ensure upload directory exists
 try {
