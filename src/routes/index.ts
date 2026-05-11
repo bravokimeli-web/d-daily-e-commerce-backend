@@ -25,6 +25,7 @@ import {
   getAllResellers,
   getResellerById,
   updateResellerStatus,
+  deleteReseller,
   upload,
 } from "../controllers/resellerController";
 import { requireAdmin } from "../middleware/auth";
@@ -132,6 +133,7 @@ router.post(
 router.get("/admin/resellers", requireAdmin, getAllResellers);
 router.get("/admin/resellers/:id", requireAdmin, getResellerById);
 router.patch("/admin/resellers/:id/status", requireAdmin, updateResellerStatus);
+router.delete("/admin/resellers/:id", requireAdmin, deleteReseller);
 
 // ─── Catch-all for debugging ──────────────────────────────────────────────────
 // Temporarily removed to fix deployment issue

@@ -210,4 +210,35 @@ export const updateResellerStatus = async (
   }
 };
 
+/** DELETE /api/admin/resellers/:id — removes application and uploaded files */
+export const deleteReseller = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const reseller = await Reseller.findById(req.params.id);
+    if (!reseller) {
+      res.status(404).json({ success: false, message: "Reseller not found" });
+      return;
+    }
+
+    const docs = reseller.documents as Record<string, string> | undefined;
+    if (docs && typeof docs === "object") {
+      for (const rel of Object.values(docs)) {
+        if (!rel || typeof rel !== "string" || !rel.includes("reseller-docs")) continue;
+        const fname = path.basename(rel);
+        const fp = path.join(uploadDir, fname);
+        try {
+          await fs.promises.unlink(fp);
+        } catch {
+          /* missing file is fine */
+        }
+      }
+    }
+
+    await Reseller.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: "Application deleted" });
+  } catch (err) {
+    console.error("Delete reseller error:", err);
+    res.status(500).json({ success: false, message: "Failed to delete application" });
+  }
+};
+
 export { upload };
