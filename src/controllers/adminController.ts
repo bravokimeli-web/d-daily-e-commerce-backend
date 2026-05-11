@@ -89,13 +89,16 @@ export const getDashboardStats = async (_req: Request, res: Response): Promise<v
   try {
     const { Order } = await import("../models/Order");
     const { Product } = await import("../models/Product");
+    const { Reseller } = await import("../models/Reseller");
 
-    const [totalOrders, paidOrders, pendingOrders, totalProducts, recentOrders] = await Promise.all([
+    const [totalOrders, paidOrders, pendingOrders, totalProducts, recentOrders, totalResellers, pendingResellers] = await Promise.all([
       Order.countDocuments(),
       Order.countDocuments({ status: "paid" }),
       Order.countDocuments({ status: "pending_payment" }),
       Product.countDocuments({ isActive: true }),
       Order.find().sort({ createdAt: -1 }).limit(5).select("orderNumber customer.name total status createdAt"),
+      Reseller.countDocuments(),
+      Reseller.countDocuments({ status: "pending" }),
     ]);
 
     const revenueResult = await Order.aggregate([
@@ -111,6 +114,7 @@ export const getDashboardStats = async (_req: Request, res: Response): Promise<v
         orders: { total: totalOrders, paid: paidOrders, pending: pendingOrders },
         products: { total: totalProducts },
         revenue: { total: totalRevenue },
+        resellers: { total: totalResellers, pending: pendingResellers },
         recentOrders,
       },
     });

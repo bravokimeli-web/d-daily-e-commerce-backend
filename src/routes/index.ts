@@ -20,6 +20,13 @@ import {
   getAdminProfile,
   getDashboardStats,
 } from "../controllers/adminController";
+import {
+  createResellerApplication,
+  getAllResellers,
+  getResellerById,
+  updateResellerStatus,
+  upload,
+} from "../controllers/resellerController";
 import { requireAdmin } from "../middleware/auth";
 
 const router = Router();
@@ -55,5 +62,22 @@ router.post("/admin/login", adminLogin);
 router.post("/admin/seed", seedAdmin); // disabled in production
 router.get("/admin/me", requireAdmin, getAdminProfile);
 router.get("/admin/dashboard", requireAdmin, getDashboardStats);
+
+// ─── Reseller (public) ────────────────────────────────────────────────────────
+router.post(
+  "/reseller/apply",
+  upload.fields([
+    { name: "id_front", maxCount: 1 },
+    { name: "id_back", maxCount: 1 },
+    { name: "kra_pin", maxCount: 1 },
+    { name: "additional", maxCount: 1 },
+  ]),
+  createResellerApplication
+);
+
+// ─── Reseller (admin) ────────────────────────────────────────────────────────
+router.get("/admin/resellers", requireAdmin, getAllResellers);
+router.get("/admin/resellers/:id", requireAdmin, getResellerById);
+router.patch("/admin/resellers/:id/status", requireAdmin, updateResellerStatus);
 
 export default router;

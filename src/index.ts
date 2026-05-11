@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import path from "path";
 import { connectDB } from "./config/db";
 import routes from "./routes";
 
@@ -39,6 +40,9 @@ app.use("/api/webhooks/paystack", express.raw({ type: "application/json" }));
 // JSON for everything else
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// ─── Static files ──────────────────────────────────────────────────────────────
+app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
 // ─── Routes ────────────────────────────────────────────────────────────────────
 app.use("/api", routes);
