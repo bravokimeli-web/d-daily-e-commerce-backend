@@ -69,7 +69,7 @@ const productSchema = z.object({
   slug: z.string().min(1).toLowerCase(),
   name: z.string().min(1),
   price: z.number().nullable(),
-  originalPrice: z.number().nullable().optional(),
+  originalPrice: z.number().min(0).optional(),
   category: z.enum(["lighting", "home-protection", "farm-protection", "fashion-design"]),
   image: z.string().min(1),
   tagline: z.string().min(1),
