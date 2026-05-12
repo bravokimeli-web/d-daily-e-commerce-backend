@@ -1,11 +1,12 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-export type Category = "pest-control" | "lighting" | "home-protection" | "farm-protection";
+export type Category = "lighting" | "home-protection" | "farm-protection" | "fashion-design";
 
 export interface IProduct extends Document {
   slug: string;
   name: string;
   price: number | null;
+  originalPrice?: number;
   category: Category;
   image: string; // URL or path
   tagline: string;
@@ -25,10 +26,11 @@ const ProductSchema = new Schema<IProduct>(
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     name: { type: String, required: true, trim: true },
     price: { type: Number, default: null },
+    originalPrice: { type: Number, default: null, min: 0 },
     category: {
       type: String,
       required: true,
-      enum: ["pest-control", "lighting", "home-protection", "farm-protection"],
+      enum: ["lighting", "home-protection", "farm-protection", "fashion-design"],
     },
     image: { type: String, required: true },
     tagline: { type: String, required: true },
