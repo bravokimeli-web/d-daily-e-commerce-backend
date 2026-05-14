@@ -1,5 +1,5 @@
-import mongoose, { Document, Schema } from "mongoose";
-import crypto from "crypto";
+import mongoose, { Document, Schema, Model } from "mongoose";
+import bcrypt from "bcryptjs";
 
 export interface IAdmin extends Document {
   name: string;
@@ -10,7 +10,11 @@ export interface IAdmin extends Document {
   lastLogin?: Date;
   createdAt: Date;
   updatedAt: Date;
-  verifyPassword(password: string): boolean;
+  verifyPassword(password: string): Promise<boolean>;
+}
+
+export interface AdminModel extends Model<IAdmin> {
+  hashPassword(password: string): Promise<string>;
 }
 
 const AdminSchema = new Schema<IAdmin>(
@@ -25,14 +29,13 @@ const AdminSchema = new Schema<IAdmin>(
   { timestamps: true }
 );
 
-// Simple SHA-256 hashing (use bcrypt in production)
-AdminSchema.methods.verifyPassword = function (password: string): boolean {
-  const hash = crypto.createHash("sha256").update(password).digest("hex");
-  return hash === this.passwordHash;
+AdminSchema.methods.verifyPassword = async function (password: string): Promise<boolean> {
+  return bcrypt.compare(password, this.passwordHash);
 };
 
-AdminSchema.statics.hashPassword = (password: string): string => {
-  return crypto.createHash("sha256").update(password).digest("hex");
+AdminSchema.statics.hashPassword = async function (password: string): Promise<string> {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 };
 
-export const Admin = mongoose.model<IAdmin>("Admin", AdminSchema);
+export const Admin = mongoose.model<IAdmin, AdminModel>("Admin", AdminSchema);

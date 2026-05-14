@@ -9,6 +9,7 @@ import { UPLOADS_DIR } from "./paths";
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
+app.set("trust proxy", 1);
 
 // ─── Security & logging ────────────────────────────────────────────────────────
 // Allow storefront (e.g. Vercel) to display uploaded images from `<img src="https://api…/uploads/…">`.
@@ -18,48 +19,49 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
+
+morgan.token("auth", (req) => {
+  const auth = req.headers.authorization;
+  return auth ? "[REDACTED]" : "-";
+});
+
+const morganFormat =
+  process.env.NODE_ENV === "production"
+    ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :auth'
+    : "dev";
+
+app.use(morgan(morganFormat));
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────
-const allowedOrigins = [
+const defaultOrigins = [
   process.env.FRONTEND_URL ?? "http://localhost:3000",
-  "http://localhost:5173", // Vite dev server
+  "http://localhost:5173",
   "https://localhost:5173",
   "http://127.0.0.1:5173",
   "https://127.0.0.1:5173",
-  // Add production URLs
-  "https://d-daily-e-commerce.vercel.app",
-  "https://d-daily-e-commerce-git-main-bravokimeli-web.vercel.app",
-  // Allow all localhost variations
-  /^https?:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+];
+
+const allowedOrigins = [
+  ...defaultOrigins,
+  ...(process.env.ALLOWED_ORIGINS?.split(",").map((url) => url.trim()).filter(Boolean) ?? []),
 ];
 
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
 
-    // Check if origin matches any allowed pattern
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (typeof allowed === 'string') {
-        return allowed === origin;
-      } else if (allowed instanceof RegExp) {
-        return allowed.test(origin);
-      }
-      return false;
-    });
+    const isAllowed = allowedOrigins.some((allowed) => allowed === origin);
 
     if (isAllowed) {
       callback(null, true);
     } else {
       console.log(`CORS blocked origin: ${origin}`);
-      callback(null, true); // Allow for now to debug
+      callback(new Error("Not allowed by CORS"), false);
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-email'],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
@@ -67,22 +69,21 @@ app.use('/api', cors(corsOptions));
 
 // ─── Body parsing ──────────────────────────────────────────────────────────────
 // Raw body for Paystack webhook signature verification
-app.use("/api/webhooks/paystack", express.raw({ type: "application/json" }));
+app.use("/api/webhooks/paystack", express.raw({ type: "application/json", limit: "1mb" }));
 // JSON for everything else
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// ─── Static files ──────────────────────────────────────────────────────────────
-app.use("/uploads", express.static(UPLOADS_DIR));
+// ─── Static files ──────────────────────────────────────────────────────────────────
+app.use(
+  "/uploads",
+  express.static(UPLOADS_DIR, {
+    immutable: true,
+    maxAge: 604800000,
+  })
+);
 
-// ─── Routes ────────────────────────────────────────────────────────────────────
-app.use("/api", (req, res, next) => {
-  console.log(`API Request: ${req.method} ${req.path}`, {
-    headers: req.headers,
-    body: req.body
-  });
-  next();
-});
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api", routes);
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────

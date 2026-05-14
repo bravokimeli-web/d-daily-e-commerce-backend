@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import { Admin } from "../models/Admin";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
+import bcrypt from "bcryptjs";
+
+const DUMMY_PASSWORD_HASH = "$2a$10$CwTycUXWue0Thq9StjUM0uJ8H8srQpxLuL1KXq1G6/1lLYaVOF.G";
 
 /** POST /api/admin/login */
 export const adminLogin = async (req: Request, res: Response): Promise<void> => {
@@ -13,7 +15,10 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     }
 
     const admin = await Admin.findOne({ email: email.toLowerCase(), isActive: true });
-    if (!admin || !admin.verifyPassword(password)) {
+    const passwordHash = admin?.passwordHash ?? DUMMY_PASSWORD_HASH;
+    const passwordValid = await bcrypt.compare(password, passwordHash);
+
+    if (!admin || !passwordValid) {
       res.status(401).json({ success: false, message: "Invalid credentials" });
       return;
     }
@@ -45,6 +50,13 @@ export const seedAdmin = async (req: Request, res: Response): Promise<void> => {
     res.status(403).json({ success: false, message: "Not available in production" });
     return;
   }
+
+  const setupToken = req.headers["x-setup-token"] as string;
+  if (!setupToken || setupToken !== process.env.SETUP_TOKEN) {
+    res.status(401).json({ success: false, message: "Invalid setup token" });
+    return;
+  }
+
   try {
     const existing = await Admin.findOne({ role: "super_admin" });
     if (existing) {
@@ -52,7 +64,7 @@ export const seedAdmin = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const passwordHash = crypto.createHash("sha256").update("Admin@DDailyLtd2024").digest("hex");
+    const passwordHash = await Admin.hashPassword("Admin@DDailyLtd2024");
     const admin = await Admin.create({
       name: "D-Daily Admin",
       email: "admin@ddaily.co.ke",

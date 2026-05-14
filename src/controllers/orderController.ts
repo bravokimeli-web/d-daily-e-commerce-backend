@@ -162,17 +162,31 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
 /** POST /api/orders/webhook — Paystack webhook handler */
 export const paystackWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Verify webhook signature
-    const signature = req.headers["x-paystack-signature"] as string;
+    const signatureHeader = req.headers["x-paystack-signature"];
     const secret = process.env.PAYSTACK_SECRET_KEY as string;
-    const hash = crypto.createHmac("sha512", secret).update(JSON.stringify(req.body)).digest("hex");
+    const rawBody = req.body as Buffer;
 
-    if (hash !== signature) {
+    if (!signatureHeader || typeof signatureHeader !== "string") {
+      res.status(400).json({ message: "Missing Paystack signature" });
+      return;
+    }
+
+    if (!secret) {
+      res.status(500).json({ message: "Paystack secret not configured" });
+      return;
+    }
+
+    const computedHash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
+    const actualSignature = Buffer.from(signatureHeader, "utf8");
+    const expectedSignature = Buffer.from(computedHash, "utf8");
+
+    if (actualSignature.length !== expectedSignature.length || !crypto.timingSafeEqual(actualSignature, expectedSignature)) {
       res.status(401).json({ message: "Invalid signature" });
       return;
     }
 
-    const { event, data } = req.body;
+    const payload = JSON.parse(rawBody.toString("utf8"));
+    const { event, data } = payload;
 
     if (event === "charge.success") {
       await Order.findOneAndUpdate(

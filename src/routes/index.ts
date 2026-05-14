@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import {
   getAllProducts,
   getProductBySlug,
@@ -33,6 +34,22 @@ import {
 } from "../controllers/resellerController";
 import { requireAdmin } from "../middleware/auth";
 import multer from "multer";
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many login attempts, please try again later" },
+});
+
+const orderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many orders submitted, please wait a moment" },
+});
 
 const router = Router();
 
@@ -74,7 +91,7 @@ router.put("/admin/products/:slug", requireAdmin, updateProduct);
 router.delete("/admin/products/:slug", requireAdmin, deleteProduct);
 
 // ─── Orders (public) ──────────────────────────────────────────────────────────
-router.post("/orders", createOrder);
+router.post("/orders", orderLimiter, createOrder);
 router.get("/orders/verify/:reference", verifyOrder);
 router.get("/orders/:orderNumber", getOrder);
 
@@ -86,7 +103,7 @@ router.patch("/admin/orders/:orderNumber/status", requireAdmin, updateOrderStatu
 router.post("/webhooks/paystack", paystackWebhook);
 
 // ─── Admin auth ───────────────────────────────────────────────────────────────
-router.post("/admin/login", adminLogin);
+router.post("/admin/login", loginLimiter, adminLogin);
 router.post("/admin/seed", seedAdmin); // disabled in production
 router.get("/admin/me", requireAdmin, getAdminProfile);
 router.get("/admin/dashboard", requireAdmin, getDashboardStats);
