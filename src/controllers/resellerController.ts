@@ -242,6 +242,16 @@ export const updateResellerStatus = async (
       return;
     }
 
+    // Send notification email to applicant
+    try {
+      if (reseller.email) {
+        const { sendResellerStatusEmail } = await import("../utils/email");
+        await sendResellerStatusEmail(reseller.email, reseller);
+      }
+    } catch (err) {
+      console.error("Failed to send reseller status email:", err);
+    }
+
     res.json({
       success: true,
       message: `Reseller marked as ${status}`,

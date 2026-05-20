@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Order } from "../models/Order";
+import { sendOrderConfirmation } from "../utils/email";
 import { generateOrderNumber } from "../utils/helpers";
 import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
 import { z } from "zod";
@@ -85,6 +86,16 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         customerPhone: customer.phone,
       },
     });
+
+    // Send order confirmation email (if email provided)
+    try {
+      if (customer.email) {
+        const paymentUrl = paystackRes?.data?.authorization_url;
+        await sendOrderConfirmation(customer.email, order, paymentUrl);
+      }
+    } catch (err) {
+      console.error("Error sending order confirmation email:", err);
+    }
 
     res.status(201).json({
       success: true,
