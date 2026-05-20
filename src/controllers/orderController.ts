@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Order } from "../models/Order";
-import { sendOrderConfirmation, sendAdminNotification } from "../utils/email";
+import { queueOrderConfirmationEmail, queueAdminNotification } from "../utils/emailJobs";
 import { generateOrderNumber } from "../utils/helpers";
 import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
 import { z } from "zod";
@@ -87,23 +87,18 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       },
     });
 
-    // Send order confirmation email (if email provided)
-    try {
-      if (customer.email) {
-        const paymentUrl = paystackRes?.data?.authorization_url;
-        await sendOrderConfirmation(customer.email, order, paymentUrl);
-      }
-    } catch (err) {
-      console.error("Error sending order confirmation email:", err);
+    // Queue order confirmation email (if email provided)
+    if (customer.email) {
+      const paymentUrl = paystackRes?.data?.authorization_url;
+      queueOrderConfirmationEmail(customer.email, order, paymentUrl).catch((err) => {
+        console.error("Error queueing order confirmation email:", err);
+      });
     }
 
-    // Notify admins about new order
-    try {
-      const adminHtml = `New order <strong>${order.orderNumber}</strong> for KES ${order.total}.`;
-      await sendAdminNotification(`New order: ${order.orderNumber}`, adminHtml);
-    } catch (err) {
-      console.error("Failed to send admin notification for new order:", err);
-    }
+    // Queue admin notification for new order
+    queueAdminNotification(`New order: ${order.orderNumber}`, `New order <strong>${order.orderNumber}</strong> for KES ${order.total}.`).catch((err) => {
+      console.error("Failed to queue admin notification for new order:", err);
+    });
 
     res.status(201).json({
       success: true,

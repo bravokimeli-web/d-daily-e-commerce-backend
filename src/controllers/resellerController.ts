@@ -4,6 +4,7 @@ import multer, { Multer } from "multer";
 import path from "path";
 import fs from "fs";
 import { UPLOADS_DIR } from "../paths";
+import { queueResellerStatusEmail, queueAdminNotification } from "../utils/emailJobs";
 
 // Configure multer for file uploads (must match `express.static` for `/uploads`)
 const uploadDir = path.join(UPLOADS_DIR, "reseller-docs");
@@ -151,14 +152,10 @@ export const createResellerApplication = async (
       data: reseller,
     });
 
-    // Notify admins about new reseller application
-    try {
-      const { sendAdminNotification } = await import("../utils/email");
-      const adminHtml = `New reseller application from ${reseller.full_name} (${reseller.email})`;
-      await sendAdminNotification("New reseller application", adminHtml);
-    } catch (err) {
-      console.error("Failed to send admin notification for reseller application:", err);
-    }
+    // Queue admin notification for new reseller application
+    queueAdminNotification("New reseller application", `New reseller application from ${reseller.full_name} (${reseller.email})`).catch((err) => {
+      console.error("Failed to queue admin notification for reseller application:", err);
+    });
   } catch (err) {
     console.error("Reseller application error:", err);
     res.status(500).json({
@@ -251,14 +248,11 @@ export const updateResellerStatus = async (
       return;
     }
 
-    // Send notification email to applicant
-    try {
-      if (reseller.email) {
-        const { sendResellerStatusEmail } = await import("../utils/email");
-        await sendResellerStatusEmail(reseller.email, reseller);
-      }
-    } catch (err) {
-      console.error("Failed to send reseller status email:", err);
+    // Queue reseller status email to applicant
+    if (reseller.email) {
+      queueResellerStatusEmail(reseller.email, reseller).catch((err) => {
+        console.error("Failed to queue reseller status email:", err);
+      });
     }
 
     res.json({
