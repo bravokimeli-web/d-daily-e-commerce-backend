@@ -48,24 +48,29 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin) return callback(null, true);
+    if (!origin) return callback(null, true); // Allow requests with no origin (like curl, mobile apps)
 
     const isAllowed = allowedOrigins.some((allowed) => allowed === origin);
 
     if (isAllowed) {
       callback(null, true);
     } else {
-      console.log(`CORS blocked origin: ${origin}`);
-      callback(new Error("Not allowed by CORS"), false);
+      console.warn(`CORS warning: Origin not in allowlist: ${origin}. Allowlist: ${allowedOrigins.join(", ")}`);
+      // For development, allow unmatched origins but log them
+      if (process.env.NODE_ENV === "development") {
+        callback(null, true);
+      } else {
+        callback(null, false); // Block in production (don't throw error, just deny)
+      }
     }
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
-app.use('/api', cors(corsOptions));
 
 // ─── Body parsing ──────────────────────────────────────────────────────────────
 // Raw body for Paystack webhook signature verification
