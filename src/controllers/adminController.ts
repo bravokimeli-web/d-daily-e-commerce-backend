@@ -44,13 +44,8 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-/** POST /api/admin/seed — One-time seed for first super admin (disable in production) */
+/** POST /api/admin/seed — One-time seed for first super admin (require setup token) */
 export const seedAdmin = async (req: Request, res: Response): Promise<void> => {
-  if (process.env.NODE_ENV === "production") {
-    res.status(403).json({ success: false, message: "Not available in production" });
-    return;
-  }
-
   const setupToken = req.headers["x-setup-token"] as string;
   if (!setupToken || setupToken !== process.env.SETUP_TOKEN) {
     res.status(401).json({ success: false, message: "Invalid setup token" });
