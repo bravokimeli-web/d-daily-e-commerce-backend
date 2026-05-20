@@ -1,13 +1,26 @@
 import { Resend } from "resend";
+import { renderOrderConfirmation, renderResellerStatus, renderAdminNotification } from "./emailTemplates";
 
 const apiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@ddaily.co.ke";
+const adminEmails = (process.env.RESEND_ADMIN_EMAILS || "").split(",").map((s) => s.trim()).filter(Boolean);
 
 let client: Resend | null = null;
 if (apiKey) client = new Resend(apiKey);
 
-function formatCurrency(n: number) {
-  return `KES ${n.toLocaleString()}`;
+async function sendWithRetry(opts: { from: string; to: string | string[]; subject: string; html?: string; text?: string }, attempts = 3) {
+  if (!client) throw new Error("Resend not configured");
+  let lastErr: any = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await client.emails.send(opts as any);
+    } catch (err) {
+      lastErr = err;
+      const backoff = Math.pow(2, i) * 100; // ms
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+  throw lastErr;
 }
 
 export async function sendOrderConfirmation(to: string, order: any, paymentUrl?: string) {
@@ -16,28 +29,9 @@ export async function sendOrderConfirmation(to: string, order: any, paymentUrl?:
     return;
   }
 
-  const itemsHtml = (order.items || [])
-    .map((it: any) => `<li>${it.name} &times; ${it.qty} — ${formatCurrency(it.price)}</li>`)
-    .join("\n");
-
-  const html = `
-    <p>Hi ${order.customer?.name || "Customer"},</p>
-    <p>Thanks for your order <strong>${order.orderNumber}</strong>. Summary:</p>
-    <ul>
-      ${itemsHtml}
-    </ul>
-    <p><strong>Total:</strong> ${formatCurrency(order.total)}</p>
-    ${paymentUrl ? `<p>You can complete payment here: <a href="${paymentUrl}">${paymentUrl}</a></p>` : ""}
-    <p>Thanks,<br/>D-Daily Team</p>
-  `;
-
+  const html = renderOrderConfirmation(order, paymentUrl);
   try {
-    await client.emails.send({
-      from: fromEmail,
-      to,
-      subject: `Order received — ${order.orderNumber}`,
-      html,
-    });
+    await sendWithRetry({ from: fromEmail, to, subject: `Order received — ${order.orderNumber}`, html }, 3);
   } catch (err) {
     console.error("Failed to send order confirmation email:", err);
   }
@@ -48,22 +42,27 @@ export async function sendResellerStatusEmail(to: string, reseller: any) {
     console.warn("Resend client not configured; skipping reseller status email");
     return;
   }
-
-  const html = `
-    <p>Hi ${reseller.full_name || "Applicant"},</p>
-    <p>Your reseller application status: <strong>${reseller.status}</strong></p>
-    ${reseller.notes ? `<p>Notes: ${reseller.notes}</p>` : ""}
-    <p>Thanks for applying — D-Daily Team</p>
-  `;
-
+  const html = renderResellerStatus(reseller);
   try {
-    await client.emails.send({
-      from: fromEmail,
-      to,
-      subject: `Reseller application ${reseller.status}`,
-      html,
-    });
+    await sendWithRetry({ from: fromEmail, to, subject: `Reseller application ${reseller.status}`, html }, 3);
   } catch (err) {
     console.error("Failed to send reseller status email:", err);
+  }
+}
+
+export async function sendAdminNotification(subject: string, contentHtml: string) {
+  if (!client) {
+    console.warn("Resend client not configured; skipping admin notification");
+    return;
+  }
+  const to = adminEmails.length ? adminEmails : [];
+  if (to.length === 0) {
+    console.warn("No admin emails configured (RESEND_ADMIN_EMAILS)");
+    return;
+  }
+  try {
+    await sendWithRetry({ from: fromEmail, to, subject, html: contentHtml }, 3);
+  } catch (err) {
+    console.error("Failed to send admin notification email:", err);
   }
 }

@@ -150,6 +150,15 @@ export const createResellerApplication = async (
       message: "Application submitted successfully",
       data: reseller,
     });
+
+    // Notify admins about new reseller application
+    try {
+      const { sendAdminNotification } = await import("../utils/email");
+      const adminHtml = `New reseller application from ${reseller.full_name} (${reseller.email})`;
+      await sendAdminNotification("New reseller application", adminHtml);
+    } catch (err) {
+      console.error("Failed to send admin notification for reseller application:", err);
+    }
   } catch (err) {
     console.error("Reseller application error:", err);
     res.status(500).json({

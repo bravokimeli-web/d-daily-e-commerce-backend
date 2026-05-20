@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Order } from "../models/Order";
-import { sendOrderConfirmation } from "../utils/email";
+import { sendOrderConfirmation, sendAdminNotification } from "../utils/email";
 import { generateOrderNumber } from "../utils/helpers";
 import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
 import { z } from "zod";
@@ -95,6 +95,14 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       }
     } catch (err) {
       console.error("Error sending order confirmation email:", err);
+    }
+
+    // Notify admins about new order
+    try {
+      const adminHtml = `New order <strong>${order.orderNumber}</strong> for KES ${order.total}.`;
+      await sendAdminNotification(`New order: ${order.orderNumber}`, adminHtml);
+    } catch (err) {
+      console.error("Failed to send admin notification for new order:", err);
     }
 
     res.status(201).json({
