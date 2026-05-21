@@ -33,23 +33,23 @@ export function renderResellerApplicationReceived(reseller: any) {
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
     <h2>Application Received ✅</h2>
     <p>Hi ${escapeHtml(reseller.full_name || "Applicant")},</p>
-    <p>Thank you for submitting your reseller application to D-Daily Ltd!</p>
+    <p>Thank you for applying to become a reseller with D-Daily Ltd.</p>
     
     <p style="background: #e3f2fd; padding: 10px; border-left: 4px solid #1976d2; margin: 15px 0;">
-      <strong>We've received your application and it's being processed.</strong>
+      <strong>We have your application and our team is reviewing it now.</strong>
     </p>
     
     <h3>What happens next?</h3>
     <ul>
-      <li>Our team will review your application within 2-3 business days</li>
-      <li>We'll verify your documents and contact information</li>
-      <li>You'll receive an email with the status update</li>
+      <li>Our reseller team will review your application within 2-3 business days</li>
+      <li>We'll verify your details and contact information</li>
+      <li>You'll receive a status update by email once the review is complete</li>
     </ul>
     
     <p><strong>In the meantime:</strong></p>
     <p>You can track your application status anytime by visiting: <a href="https://d-daily-frontend.vercel.app/reseller.track">Check Application Status</a></p>
     
-    <p>Questions? Reach out to our support team!</p>
+    <p>If you have any questions, please contact our support team.</p>
     <p><strong>D-Daily Ltd Team</strong></p>
   </div>
   `;
@@ -57,9 +57,9 @@ export function renderResellerApplicationReceived(reseller: any) {
 
 export function renderResellerStatus(reseller: any) {
   const statusMessages: { [key: string]: string } = {
-    approved: "🎉 <strong>Congratulations! Your application has been approved!</strong><br/>You're now an official D-Daily Ltd reseller. Welcome to our team!",
+    approved: "🎉 <strong>Congratulations! Your application has been approved!</strong><br/>You're now an official D-Daily Ltd reseller. Welcome to our team! We will contact you soon with the next steps.",
     rejected: "❌ <strong>Unfortunately, your application has been declined.</strong><br/>We appreciate your interest and encourage you to reapply in the future with updated information.",
-    pending: "⏳ <strong>Your application is still being reviewed.</strong><br/>We're processing your submission and will update you soon.",
+    pending: "⏳ <strong>Your application is still being reviewed.</strong><br/>Our team is checking your details and will email you the outcome shortly.",
   };
 
   const message = statusMessages[reseller.status] || `Your application status: <strong>${escapeHtml(reseller.status)}</strong>`;
