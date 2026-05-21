@@ -34,6 +34,7 @@ import {
 } from "../controllers/resellerController";
 import { requireAdmin } from "../middleware/auth";
 import multer from "multer";
+import { redis } from "../lib/redis";
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -73,6 +74,18 @@ router.get("/debug", (req, res) => {
     headers: req.headers,
     timestamp: new Date().toISOString()
   });
+});
+
+// Debug cache test: sets a timestamped key and returns previous value (if any)
+router.get("/debug/cache-test", async (req, res) => {
+  try {
+    const key = "ddaily_cache_test_key";
+    const prev = await redis.get(key);
+    await redis.set(key, new Date().toISOString(), { ex: 120 });
+    res.json({ success: true, key, previous: prev ?? null, now: new Date().toISOString() });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Cache test failed", error: String(err) });
+  }
 });
 
 // ─── Products (public) ─────────────────────────────────────────────────────────

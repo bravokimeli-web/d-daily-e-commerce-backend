@@ -5,6 +5,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { UPLOADS_DIR } from "../paths";
+import { cacheGetOrSet } from "../utils/cache";
 
 const productUploadsDir = path.join(UPLOADS_DIR, "products");
 try {
@@ -93,7 +94,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
     if (active !== undefined) filter.isActive = active === "true";
     if (search) filter.$text = { $search: search as string };
 
-    const products = await Product.find(filter).sort({ createdAt: -1 });
+    const cacheKey = `products:${JSON.stringify({ category, search, active })}`;
+    const products = await cacheGetOrSet(cacheKey, 60, async () => {
+      return await Product.find(filter).sort({ createdAt: -1 }).lean();
+    });
     res.json({ success: true, data: products });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch products" });
@@ -103,7 +107,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
 /** GET /api/products/:slug */
 export const getProductBySlug = async (req: Request, res: Response): Promise<void> => {
   try {
-    const product = await Product.findOne({ slug: req.params.slug, isActive: true });
+    const cacheKey = `product:${req.params.slug}`;
+    const product = await cacheGetOrSet(cacheKey, 3600, async () => {
+      return await Product.findOne({ slug: req.params.slug, isActive: true }).lean();
+    });
     if (!product) {
       res.status(404).json({ success: false, message: "Product not found" });
       return;
