@@ -1,30 +1,22 @@
 import { Queue, JobScheduler } from "bullmq";
-import Redis from "ioredis";
-
-const redisUrl = process.env.REDIS_URL;
-const redisHost = process.env.REDIS_HOST;
-const redisPort = process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379;
-const redisPassword = process.env.REDIS_PASSWORD;
-const redisTls = process.env.REDIS_TLS === "true";
+import { redis } from "../lib/redis";
 
 let emailQueue: Queue | null = null;
 let emailQueueScheduler: JobScheduler | null = null;
-let connection: Redis | null = null;
 
-if (redisUrl) {
-  connection = new Redis(redisUrl);
-} else if (redisHost) {
-  connection = new Redis({
-    host: redisHost,
-    port: redisPort,
-    password: redisPassword,
-    tls: redisTls ? {} : undefined,
-  });
-}
-
-if (connection) {
-  emailQueue = new Queue("email", { connection });
-  emailQueueScheduler = new JobScheduler("email", { connection });
+try {
+  if (redis) {
+    // For Upstash REST API with BullMQ, we need the connection details
+    // BullMQ requires a standard Redis connection, not REST API
+    // If you have both REST and native protocol credentials, use native for BullMQ
+    emailQueue = new Queue("email", { connection: redis as any });
+    emailQueueScheduler = new JobScheduler("email", { connection: redis as any });
+  }
+} catch (error) {
+  console.warn(
+    "Failed to initialize email queue. Email jobs will be sent directly without queueing.",
+    error
+  );
 }
 
 export { emailQueue, emailQueueScheduler };
