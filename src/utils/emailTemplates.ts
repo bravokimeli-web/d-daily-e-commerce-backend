@@ -75,12 +75,6 @@ export function renderResellerStatus(reseller: any) {
     
     ${reseller.notes ? `<p><strong>Notes from our team:</strong><br/>${escapeHtml(reseller.notes)}</p>` : ""}
     
-    ${reseller.status === "approved" ? `
-      <p style="background: #c8e6c9; padding: 10px; border-left: 4px solid #4caf50; margin: 15px 0;">
-        <strong>Next Steps:</strong> Log in to your reseller dashboard to start selling with D-Daily Ltd!
-      </p>
-    ` : ""}
-    
     ${reseller.status === "rejected" ? `
       <p>If you have any questions about this decision, please don't hesitate to contact us.</p>
     ` : ""}
