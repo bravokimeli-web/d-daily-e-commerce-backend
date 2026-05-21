@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { renderOrderConfirmation, renderResellerStatus, renderAdminNotification } from "./emailTemplates";
+import { renderOrderConfirmation, renderResellerStatus, renderAdminNotification, renderResellerApplicationReceived } from "./emailTemplates";
 
 const apiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@ddaily.co.ke";
@@ -37,6 +37,20 @@ export async function sendOrderConfirmation(to: string, order: any, paymentUrl?:
   }
 }
 
+export async function sendResellerApplicationReceivedEmail(to: string, reseller: any) {
+  if (!client) {
+    console.warn("Resend client not configured; skipping reseller application received email");
+    return;
+  }
+
+  const html = renderResellerApplicationReceived(reseller);
+  try {
+    await sendWithRetry({ from: fromEmail, to, subject: "Reseller Application Received ✅", html }, 3);
+  } catch (err) {
+    console.error("Failed to send reseller application received email:", err);
+  }
+}
+
 export async function sendResellerStatusEmail(to: string, reseller: any) {
   if (!client) {
     console.warn("Resend client not configured; skipping reseller status email");
@@ -44,7 +58,7 @@ export async function sendResellerStatusEmail(to: string, reseller: any) {
   }
   const html = renderResellerStatus(reseller);
   try {
-    await sendWithRetry({ from: fromEmail, to, subject: `Reseller application ${reseller.status}`, html }, 3);
+    await sendWithRetry({ from: fromEmail, to, subject: `Reseller Application ${reseller.status.charAt(0).toUpperCase() + reseller.status.slice(1)}`, html }, 3);
   } catch (err) {
     console.error("Failed to send reseller status email:", err);
   }

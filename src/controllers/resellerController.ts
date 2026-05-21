@@ -4,7 +4,7 @@ import multer, { Multer } from "multer";
 import path from "path";
 import fs from "fs";
 import { UPLOADS_DIR } from "../paths";
-import { queueResellerStatusEmail, queueAdminNotification } from "../utils/emailJobs";
+import { queueResellerStatusEmail, queueAdminNotification, queueResellerApplicationReceivedEmail } from "../utils/emailJobs";
 
 // Configure multer for file uploads (must match `express.static` for `/uploads`)
 const uploadDir = path.join(UPLOADS_DIR, "reseller-docs");
@@ -150,6 +150,11 @@ export const createResellerApplication = async (
       success: true,
       message: "Application submitted successfully",
       data: reseller,
+    });
+
+    // Queue confirmation email to applicant
+    queueResellerApplicationReceivedEmail(reseller.email, reseller).catch((err) => {
+      console.error("Failed to queue reseller application received email:", err);
     });
 
     // Queue admin notification for new reseller application
