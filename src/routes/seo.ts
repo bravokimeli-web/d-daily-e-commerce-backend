@@ -6,9 +6,10 @@ const router = Router();
 // ─── Sitemap ───────────────────────────────────────────────────────────────────
 router.get("/sitemap.xml", async (_req, res) => {
   try {
-    res.type("application/xml");
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=0, s-maxage=3600");
 
-    const baseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
+    const pageBaseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
     const staticPages = [
       { url: "/", changefreq: "weekly", priority: 1.0 },
       { url: "/shop", changefreq: "daily", priority: 0.9 },
@@ -31,7 +32,7 @@ router.get("/sitemap.xml", async (_req, res) => {
     // Add static pages
     staticPages.forEach((page) => {
       xml += `  <url>\n`;
-      xml += `    <loc>${baseUrl}${page.url}</loc>\n`;
+      xml += `    <loc>${pageBaseUrl}${page.url}</loc>\n`;
       xml += `    <changefreq>${page.changefreq}</changefreq>\n`;
       xml += `    <priority>${page.priority}</priority>\n`;
       xml += `  </url>\n`;
@@ -40,7 +41,7 @@ router.get("/sitemap.xml", async (_req, res) => {
     // Add product pages
     products.forEach((product) => {
       xml += `  <url>\n`;
-      xml += `    <loc>${baseUrl}/product/${product.slug}</loc>\n`;
+      xml += `    <loc>${pageBaseUrl}/product/${product.slug}</loc>\n`;
       xml += `    <lastmod>${product.updatedAt.toISOString().split("T")[0]}</lastmod>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
       xml += `    <priority>0.8</priority>\n`;
@@ -59,7 +60,8 @@ router.get("/sitemap.xml", async (_req, res) => {
 // ─── Robots.txt ────────────────────────────────────────────────────────────────
 router.get("/robots.txt", (_req, res) => {
   res.type("text/plain");
-  const baseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
+  const pageBaseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
+  const sitemapBaseUrl = process.env.SITEMAP_URL?.replace(/\/$/, "") || process.env.BACKEND_URL?.replace(/\/$/, "") || pageBaseUrl;
   const robotsTxt = `# D-Daily Ltd Robots Configuration
 User-agent: *
 Allow: /
@@ -80,7 +82,7 @@ Allow: /
 Crawl-delay: 5
 
 # Sitemaps
-Sitemap: ${baseUrl}/sitemap.xml
+Sitemap: ${sitemapBaseUrl}/sitemap.xml
 `;
   res.send(robotsTxt);
 });
