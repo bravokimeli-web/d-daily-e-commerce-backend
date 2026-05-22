@@ -52,16 +52,15 @@ export async function cacheDelete(key: string): Promise<void> {
 
 export async function cacheInvalidateProducts(): Promise<void> {
   try {
-    // Invalidate all product list and individual product keys
-    const pattern = "product*";
-    // Upstash REST API doesn't support KEYS, so we manually invalidate common patterns
+    // Invalidate all product list and homepage/category cache keys.
     await Promise.all([
       cacheDelete("products:{}"),
       cacheDelete("products:{\"active\":\"true\"}"),
       cacheDelete("products:{\"active\":\"false\"}"),
-      // Add more patterns as needed or use a custom key tracking system
+      cacheDelete("homepage_products"),
+      cacheDelete("categories"),
     ]);
-    console.log(`[cache] Invalidated all product caches`);
+    console.log(`[cache] Invalidated product and storefront caches`);
   } catch (err) {
     console.warn("Cache invalidation error:", err);
   }
@@ -70,7 +69,7 @@ export async function cacheInvalidateProducts(): Promise<void> {
 export async function cacheInvalidateProduct(slug: string): Promise<void> {
   try {
     await cacheDelete(`product:${slug}`);
-    // Also invalidate the products list since a single product changed
+    // Also invalidate the products list and storefront caches because a product changed
     await cacheInvalidateProducts();
   } catch (err) {
     console.warn("Cache invalidation error:", err);

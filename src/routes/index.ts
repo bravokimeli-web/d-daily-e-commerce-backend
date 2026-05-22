@@ -3,6 +3,8 @@ import rateLimit from "express-rate-limit";
 import {
   getAllProducts,
   getProductBySlug,
+  getHomepageProducts,
+  getCategories,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -113,6 +115,8 @@ router.get("/debug/cache-test", async (req, res) => {
 // ─── Products (public) ─────────────────────────────────────────────────────────
 router.get("/products", getAllProducts);
 router.get("/products/:slug", getProductBySlug);
+router.get("/homepage-products", getHomepageProducts);
+router.get("/categories", getCategories);
 
 // ─── Structured Data (JSON-LD) ────────────────────────────────────────────────
 router.get("/products/:slug/schema", async (req, res) => {

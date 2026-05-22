@@ -2,27 +2,35 @@ import { Request, Response, NextFunction } from "express";
 import { Product } from "../models/Product";
 import { z } from "zod";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { UPLOADS_DIR } from "../paths";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 import { cacheGetOrSet, cacheInvalidateProduct, cacheInvalidateProducts } from "../utils/cache";
-import { optimizeProductImage } from "../utils/imageOptimizer";
 
-const productUploadsDir = path.join(UPLOADS_DIR, "products");
-try {
-  if (!fs.existsSync(productUploadsDir)) fs.mkdirSync(productUploadsDir, { recursive: true });
-} catch (e) {
-  console.error("Could not create product uploads directory:", e);
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const cloudApiKey = process.env.CLOUDINARY_API_KEY;
+const cloudApiSecret = process.env.CLOUDINARY_API_SECRET;
+
+if (!cloudName || !cloudApiKey || !cloudApiSecret) {
+  console.warn("Cloudinary config is incomplete. Product image uploads will fail until CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set.");
 }
 
+cloudinary.config({
+  cloud_name: cloudName,
+  api_key: cloudApiKey,
+  api_secret: cloudApiSecret,
+});
+
+const productImageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "d-daily/products",
+    format: "auto",
+    public_id: (req: Express.Request, file: Express.Multer.File) => `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+  } as any,
+});
+
 const productImageMulter = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, productUploadsDir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-    },
-  }),
+  storage: productImageStorage,
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype);
@@ -54,33 +62,52 @@ export const uploadProductImage = (req: Request, res: Response, next: NextFuncti
 
 /** After uploadProductImage — responds with public path stored on Product.image */
 export const completeProductImageUpload = async (req: Request, res: Response): Promise<void> => {
-  const file = req.file;
-  if (!file?.filename) {
+  const file = req.file as Express.Multer.File & { path?: string; filename?: string };
+  if (!file?.path || !file?.filename) {
     res.status(400).json({ success: false, message: "No image file received" });
     return;
   }
 
   try {
-    const inputPath = path.join(productUploadsDir, file.filename);
-    const optimized = await optimizeProductImage(inputPath, productUploadsDir, file.filename);
+    const publicId = file.filename;
+    const secureUrl = file.path;
 
-    // Return the WebP URL for frontend use
-    const webpFilename = path.basename(optimized.webp);
+    const variants = {
+      thumbnail: cloudinary.url(publicId, {
+        width: 150,
+        height: 150,
+        crop: "fill",
+        quality: "auto",
+        fetch_format: "auto",
+      }),
+      medium: cloudinary.url(publicId, {
+        width: 400,
+        height: 400,
+        crop: "fill",
+        quality: "auto",
+        fetch_format: "auto",
+      }),
+      original: cloudinary.url(publicId, {
+        quality: "auto",
+        fetch_format: "auto",
+      }),
+      webp: cloudinary.url(publicId, {
+        quality: "auto",
+        fetch_format: "auto",
+        format: "webp",
+      }),
+    };
+
     res.status(201).json({
       success: true,
       data: {
-        url: `/uploads/products/${webpFilename}`,
-        variants: {
-          thumbnail: `/uploads/products/${path.basename(optimized.thumbnail)}`,
-          medium: `/uploads/products/${path.basename(optimized.medium)}`,
-          original: `/uploads/products/${path.basename(optimized.original)}`,
-          webp: `/uploads/products/${webpFilename}`,
-        },
+        url: secureUrl,
+        variants,
       },
     });
   } catch (err) {
-    console.error("Image optimization failed:", err);
-    res.status(500).json({ success: false, message: "Failed to optimize image" });
+    console.error("Cloudinary upload response failed:", err);
+    res.status(500).json({ success: false, message: "Failed to process uploaded image" });
   }
 };
 
@@ -144,6 +171,33 @@ export const getProductBySlug = async (req: Request, res: Response): Promise<voi
     res.json({ success: true, data: product });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch product" });
+  }
+};
+
+export const getHomepageProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cacheKey = "homepage_products";
+    const products = await cacheGetOrSet(cacheKey, 3600, async () => {
+      return await Product.find({ featured: true, isActive: true })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+    });
+    res.json({ success: true, data: products });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch homepage products" });
+  }
+};
+
+export const getCategories = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const cacheKey = "categories";
+    const categories = await cacheGetOrSet(cacheKey, 86400, async () => {
+      return await Product.distinct("category", { isActive: true });
+    });
+    res.json({ success: true, data: categories });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch categories" });
   }
 };
 
