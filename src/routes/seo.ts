@@ -3,13 +3,15 @@ import { Product } from "../models/Product";
 
 const router = Router();
 
+const normalizeUrl = (url?: string) => url?.replace(/\/sitemap\.xml$/, "").replace(/\/$/, "");
+
 // ─── Sitemap ───────────────────────────────────────────────────────────────────
 router.get("/sitemap.xml", async (_req, res) => {
   try {
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=0, s-maxage=3600");
 
-    const pageBaseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
+    const pageBaseUrl = normalizeUrl(process.env.FRONTEND_URL) || "https://d-daily-frontend.vercel.app";
     const staticPages = [
       { url: "/", changefreq: "weekly", priority: 1.0 },
       { url: "/shop", changefreq: "daily", priority: 0.9 },
@@ -60,8 +62,8 @@ router.get("/sitemap.xml", async (_req, res) => {
 // ─── Robots.txt ────────────────────────────────────────────────────────────────
 router.get("/robots.txt", (_req, res) => {
   res.type("text/plain");
-  const pageBaseUrl = process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app";
-  const sitemapBaseUrl = process.env.SITEMAP_URL?.replace(/\/$/, "") || process.env.BACKEND_URL?.replace(/\/$/, "") || pageBaseUrl;
+  const pageBaseUrl = normalizeUrl(process.env.FRONTEND_URL) || "https://d-daily-frontend.vercel.app";
+  const sitemapBaseUrl = normalizeUrl(process.env.SITEMAP_URL) || process.env.BACKEND_URL?.replace(/\/$/, "") || pageBaseUrl;
   const robotsTxt = `# D-Daily Ltd Robots Configuration
 User-agent: *
 Allow: /
