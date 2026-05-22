@@ -9,6 +9,12 @@ export interface IProduct extends Document {
   originalPrice?: number;
   category: Category;
   image: string; // URL or path
+  imageVariants?: {
+    thumbnail?: string;
+    medium?: string;
+    original?: string;
+    webp?: string;
+  };
   tagline: string;
   description: string;
   usage: string[];
@@ -33,6 +39,12 @@ const ProductSchema = new Schema<IProduct>(
       enum: ["lighting", "home-protection", "farm-protection", "fashion-design"],
     },
     image: { type: String, required: true },
+    imageVariants: {
+      thumbnail: { type: String },
+      medium: { type: String },
+      original: { type: String },
+      webp: { type: String },
+    },
     tagline: { type: String, required: true },
     description: { type: String, required: true },
     usage: [{ type: String }],

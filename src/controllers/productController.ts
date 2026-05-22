@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import { UPLOADS_DIR } from "../paths";
 import { cacheGetOrSet, cacheInvalidateProduct, cacheInvalidateProducts } from "../utils/cache";
+import { optimizeProductImage } from "../utils/imageOptimizer";
 
 const productUploadsDir = path.join(UPLOADS_DIR, "products");
 try {
@@ -52,16 +53,35 @@ export const uploadProductImage = (req: Request, res: Response, next: NextFuncti
 };
 
 /** After uploadProductImage — responds with public path stored on Product.image */
-export const completeProductImageUpload = (req: Request, res: Response): void => {
+export const completeProductImageUpload = async (req: Request, res: Response): Promise<void> => {
   const file = req.file;
   if (!file?.filename) {
     res.status(400).json({ success: false, message: "No image file received" });
     return;
   }
-  res.status(201).json({
-    success: true,
-    data: { url: `/uploads/products/${file.filename}` },
-  });
+
+  try {
+    const inputPath = path.join(productUploadsDir, file.filename);
+    const optimized = await optimizeProductImage(inputPath, productUploadsDir, file.filename);
+
+    // Return the WebP URL for frontend use
+    const webpFilename = path.basename(optimized.webp);
+    res.status(201).json({
+      success: true,
+      data: {
+        url: `/uploads/products/${webpFilename}`,
+        variants: {
+          thumbnail: `/uploads/products/${path.basename(optimized.thumbnail)}`,
+          medium: `/uploads/products/${path.basename(optimized.medium)}`,
+          original: `/uploads/products/${path.basename(optimized.original)}`,
+          webp: `/uploads/products/${webpFilename}`,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Image optimization failed:", err);
+    res.status(500).json({ success: false, message: "Failed to optimize image" });
+  }
 };
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
@@ -73,6 +93,12 @@ const productSchema = z.object({
   originalPrice: z.number().min(0).optional(),
   category: z.enum(["lighting", "home-protection", "farm-protection", "fashion-design"]),
   image: z.string().min(1),
+  imageVariants: z.object({
+    thumbnail: z.string().optional(),
+    medium: z.string().optional(),
+    original: z.string().optional(),
+    webp: z.string().optional(),
+  }).optional(),
   tagline: z.string().min(1),
   description: z.string().min(1),
   usage: z.array(z.string()).default([]),
