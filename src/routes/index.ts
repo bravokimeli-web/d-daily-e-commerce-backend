@@ -35,6 +35,8 @@ import {
 import { requireAdmin } from "../middleware/auth";
 import multer from "multer";
 import { redis } from "../lib/redis";
+import { Product } from "../models/Product";
+
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -146,7 +148,7 @@ router.get("/products/:slug/schema", async (req, res) => {
       },
       category: product.category,
       ...(product.specs && {
-        additionalProperty: product.specs.map((spec) => ({
+        additionalProperty: product.specs.map((spec: any) => ({
           "@type": "PropertyValue",
           name: spec.label,
           value: spec.value,
