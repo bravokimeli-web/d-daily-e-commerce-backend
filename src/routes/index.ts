@@ -59,6 +59,26 @@ router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+router.get("/health/full", async (_req, res) => {
+  const checks: Record<string, any> = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    upstash: "unchecked",
+  };
+
+  try {
+    const testKey = "health_check_key";
+    await redis.set(testKey, "ok", { ex: 30 });
+    const val = await redis.get(testKey);
+    checks.upstash = val ? "connected" : "failed";
+  } catch (err) {
+    checks.upstash = "failed";
+    checks.status = "degraded";
+  }
+
+  res.status(checks.status === "ok" ? 200 : 503).json(checks);
+});
+
 // ─── Test endpoint ─────────────────────────────────────────────────────────────
 router.post("/test", (req, res) => {
   console.log("Test endpoint hit:", req.body);

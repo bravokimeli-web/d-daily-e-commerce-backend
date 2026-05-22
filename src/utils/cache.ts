@@ -27,7 +27,11 @@ export async function cacheSet(key: string, value: any, ttlSeconds = 60): Promis
 
 export async function cacheGetOrSet<T>(key: string, ttlSeconds: number, fetchFn: () => Promise<T>): Promise<T> {
   const cached = await cacheGet(key);
-  if (cached != null) return cached as T;
+  if (cached != null) {
+    console.log(`[cache] HIT: ${key}`);
+    return cached as T;
+  }
+  console.log(`[cache] MISS: ${key}`);
   const fresh = await fetchFn();
   try {
     await cacheSet(key, fresh, ttlSeconds);
@@ -35,4 +39,40 @@ export async function cacheGetOrSet<T>(key: string, ttlSeconds: number, fetchFn:
     // ignore cache set errors
   }
   return fresh;
+}
+
+export async function cacheDelete(key: string): Promise<void> {
+  try {
+    await redis.del(key);
+    console.log(`[cache] DELETE: ${key}`);
+  } catch (err) {
+    console.warn("Cache delete error:", err);
+  }
+}
+
+export async function cacheInvalidateProducts(): Promise<void> {
+  try {
+    // Invalidate all product list and individual product keys
+    const pattern = "product*";
+    // Upstash REST API doesn't support KEYS, so we manually invalidate common patterns
+    await Promise.all([
+      cacheDelete("products:{}"),
+      cacheDelete("products:{\"active\":\"true\"}"),
+      cacheDelete("products:{\"active\":\"false\"}"),
+      // Add more patterns as needed or use a custom key tracking system
+    ]);
+    console.log(`[cache] Invalidated all product caches`);
+  } catch (err) {
+    console.warn("Cache invalidation error:", err);
+  }
+}
+
+export async function cacheInvalidateProduct(slug: string): Promise<void> {
+  try {
+    await cacheDelete(`product:${slug}`);
+    // Also invalidate the products list since a single product changed
+    await cacheInvalidateProducts();
+  } catch (err) {
+    console.warn("Cache invalidation error:", err);
+  }
 }

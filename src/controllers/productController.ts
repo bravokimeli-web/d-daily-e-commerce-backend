@@ -5,7 +5,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { UPLOADS_DIR } from "../paths";
-import { cacheGetOrSet } from "../utils/cache";
+import { cacheGetOrSet, cacheInvalidateProduct, cacheInvalidateProducts } from "../utils/cache";
 
 const productUploadsDir = path.join(UPLOADS_DIR, "products");
 try {
@@ -137,6 +137,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     const product = await Product.create(parsed.data);
+    await cacheInvalidateProducts();
     res.status(201).json({ success: true, data: product });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to create product" });
@@ -146,6 +147,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 /** PUT /api/products/:slug  [admin] */
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
+    const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
     const parsed = productSchema.partial().safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, errors: parsed.error.flatten() });
@@ -153,7 +155,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     const product = await Product.findOneAndUpdate(
-      { slug: req.params.slug },
+      { slug },
       { $set: parsed.data },
       { new: true, runValidators: true }
     );
@@ -161,6 +163,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: "Product not found" });
       return;
     }
+    await cacheInvalidateProduct(slug);
     res.json({ success: true, data: product });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to update product" });
@@ -170,8 +173,9 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 /** DELETE /api/products/:slug  [admin] */
 export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
   try {
+    const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
     const product = await Product.findOneAndUpdate(
-      { slug: req.params.slug },
+      { slug },
       { $set: { isActive: false } },
       { new: true }
     );
@@ -179,6 +183,7 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: "Product not found" });
       return;
     }
+    await cacheInvalidateProduct(slug);
     res.json({ success: true, message: "Product deactivated successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to delete product" });
