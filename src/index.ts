@@ -5,6 +5,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { connectDB } from "./config/db";
 import routes from "./routes";
+import seoRoutes from "./routes/seo";
 import { UPLOADS_DIR } from "./paths";
 
 const app = express();
@@ -89,6 +90,10 @@ app.use(
 );
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+// SEO routes at root level
+app.use(seoRoutes);
+
+// API routes
 app.use("/api", routes);
 
 // ─── 404 handler ──────────────────────────────────────────────────────────────

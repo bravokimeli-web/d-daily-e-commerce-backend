@@ -112,6 +112,54 @@ router.get("/debug/cache-test", async (req, res) => {
 router.get("/products", getAllProducts);
 router.get("/products/:slug", getProductBySlug);
 
+// ─── Structured Data (JSON-LD) ────────────────────────────────────────────────
+router.get("/products/:slug/schema", async (req, res) => {
+  try {
+    const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+    const product = await Product.findOne({ slug, isActive: true });
+    
+    if (!product) {
+      res.status(404).json({ success: false, message: "Product not found" });
+      return;
+    }
+
+    const schema = {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      name: product.name,
+      image: product.imageVariants?.webp || product.imageVariants?.original || product.image,
+      description: product.description,
+      brand: {
+        "@type": "Brand",
+        name: "D-Daily Ltd",
+      },
+      offers: {
+        "@type": "Offer",
+        url: `${process.env.FRONTEND_URL?.replace(/\/$/, "") || "https://d-daily-frontend.vercel.app"}/product/${product.slug}`,
+        priceCurrency: "KES",
+        price: product.price || "0",
+        availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+        seller: {
+          "@type": "Organization",
+          name: "D-Daily Ltd",
+        },
+      },
+      category: product.category,
+      ...(product.specs && {
+        additionalProperty: product.specs.map((spec) => ({
+          "@type": "PropertyValue",
+          name: spec.label,
+          value: spec.value,
+        })),
+      }),
+    };
+
+    res.json(schema);
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch product schema" });
+  }
+});
+
 // ─── Products (admin) ─────────────────────────────────────────────────────────
 router.post(
   "/admin/products/upload",
