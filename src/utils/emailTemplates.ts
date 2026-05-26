@@ -5,7 +5,7 @@ export function renderOrderConfirmation(order: any, paymentUrl?: string) {
 
   const status = order.status || "pending_payment";
   const statusMessages: Record<string, string> = {
-    pending_payment: `We've received your order and it is currently <strong>pending payment</strong>. Complete payment now to confirm your purchase and begin the delivery process.`,`
+    pending_payment: `We've received your order and it is currently <strong>pending payment</strong>. Complete payment now to confirm your purchase and begin the delivery process.`,
     paid: `Payment has been received. Your order is now <strong>paid and waiting for shipping</strong>. We'll update you when it ships.`,
     processing: `Your order is paid and being prepared for shipping. We'll notify you once it has left the warehouse.`,
     shipped: `Your order has shipped and is on its way to your delivery location. We'll contact you once it arrives.`,
