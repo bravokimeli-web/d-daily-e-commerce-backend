@@ -37,6 +37,8 @@ export interface IOrder extends Document {
   payment: {
     provider: "paystack";
     reference?: string;
+    authorizationUrl?: string;
+    accessCode?: string;
     paystackRef?: string;
     paidAt?: Date;
     channel?: string; // card, mobile_money, bank_transfer
@@ -77,6 +79,8 @@ const OrderSchema = new Schema<IOrder>(
     payment: {
       provider: { type: String, default: "paystack" },
       reference: { type: String },
+      authorizationUrl: { type: String },
+      accessCode: { type: String },
       paystackRef: { type: String },
       paidAt: { type: Date },
       channel: { type: String },

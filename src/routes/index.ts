@@ -18,6 +18,9 @@ import {
   getAllOrders,
   updateOrderStatus,
   paystackWebhook,
+  sendOrderPaymentReminder,
+  sendOrderShippedNotification,
+  sendOrderDeliveredNotification,
 } from "../controllers/orderController";
 import {
   adminLogin,
@@ -185,6 +188,9 @@ router.get("/orders/:orderNumber", getOrder);
 // ─── Orders (admin) ───────────────────────────────────────────────────────────
 router.get("/admin/orders", requireAdmin, getAllOrders);
 router.patch("/admin/orders/:orderNumber/status", requireAdmin, updateOrderStatus);
+router.post("/admin/orders/:orderNumber/email/payment-reminder", requireAdmin, sendOrderPaymentReminder);
+router.post("/admin/orders/:orderNumber/email/shipped", requireAdmin, sendOrderShippedNotification);
+router.post("/admin/orders/:orderNumber/email/delivered", requireAdmin, sendOrderDeliveredNotification);
 
 // ─── Paystack webhook (raw body, no auth — Paystack signs its own requests) ───
 router.post("/webhooks/paystack", paystackWebhook);

@@ -1,5 +1,13 @@
 import { Resend } from "resend";
-import { renderOrderConfirmation, renderResellerStatus, renderAdminNotification, renderResellerApplicationReceived } from "./emailTemplates";
+import {
+  renderOrderConfirmation,
+  renderOrderPaymentReminder,
+  renderOrderShippedNotification,
+  renderOrderDeliveredNotification,
+  renderResellerStatus,
+  renderAdminNotification,
+  renderResellerApplicationReceived,
+} from "./emailTemplates";
 
 const apiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || "noreply@ddaily.co.ke";
@@ -23,17 +31,62 @@ async function sendWithRetry(opts: { from: string; to: string | string[]; subjec
   throw lastErr;
 }
 
-export async function sendOrderConfirmation(to: string, order: any, paymentUrl?: string) {
+async function sendEmail(to: string, subject: string, html: string) {
   if (!client) {
-    console.warn("Resend client not configured; skipping order confirmation email");
+    console.warn("Resend client not configured; skipping email");
     return;
   }
 
+  await sendWithRetry({ from: fromEmail, to, subject, html }, 3);
+}
+
+export async function sendOrderConfirmation(to: string, order: any, paymentUrl?: string) {
   const html = renderOrderConfirmation(order, paymentUrl);
+  const subjectMap: Record<string, string> = {
+    pending_payment: `Order received — payment pending (${order.orderNumber})`,
+    paid: `Payment received — awaiting shipment (${order.orderNumber})`,
+    processing: `Order update — processing (${order.orderNumber})`,
+    shipped: `Order shipped — ${order.orderNumber}`,
+    delivered: `Order delivered — ${order.orderNumber}`,
+    cancelled: `Order cancelled — ${order.orderNumber}`,
+    refunded: `Order refunded — ${order.orderNumber}`,
+  };
+  const subject = subjectMap[order.status] || `Order update — ${order.orderNumber}`;
+
   try {
-    await sendWithRetry({ from: fromEmail, to, subject: `Order received — ${order.orderNumber}`, html }, 3);
+    await sendEmail(to, subject, html);
   } catch (err) {
     console.error("Failed to send order confirmation email:", err);
+  }
+}
+
+export async function sendOrderPaymentReminderEmail(to: string, order: any, paymentUrl: string) {
+  const html = renderOrderPaymentReminder(order, paymentUrl);
+  const subject = `Payment reminder — order ${order.orderNumber}`;
+  try {
+    await sendEmail(to, subject, html);
+  } catch (err) {
+    console.error("Failed to send payment reminder email:", err);
+  }
+}
+
+export async function sendOrderShippedNotificationEmail(to: string, order: any) {
+  const html = renderOrderShippedNotification(order);
+  const subject = `Your order has shipped — ${order.orderNumber}`;
+  try {
+    await sendEmail(to, subject, html);
+  } catch (err) {
+    console.error("Failed to send shipped notification email:", err);
+  }
+}
+
+export async function sendOrderDeliveredNotificationEmail(to: string, order: any) {
+  const html = renderOrderDeliveredNotification(order);
+  const subject = `Order delivered — ${order.orderNumber}`;
+  try {
+    await sendEmail(to, subject, html);
+  } catch (err) {
+    console.error("Failed to send delivered notification email:", err);
   }
 }
 

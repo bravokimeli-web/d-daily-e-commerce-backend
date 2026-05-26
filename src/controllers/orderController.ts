@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import { Order } from "../models/Order";
-import { queueOrderConfirmationEmail, queueAdminNotification } from "../utils/emailJobs";
+import {
+  queueOrderConfirmationEmail,
+  queueOrderPaymentReminderEmail,
+  queueOrderShippedNotificationEmail,
+  queueOrderDeliveredNotificationEmail,
+  queueAdminNotification,
+} from "../utils/emailJobs";
 import { generateOrderNumber } from "../utils/helpers";
 import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
 import { z } from "zod";
@@ -58,23 +64,6 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       address: customer.address,
     };
 
-    // Create order in DB (pending_payment)
-    const order = await Order.create({
-      orderNumber,
-      customer: storedCustomer,
-      items,
-      subtotal,
-      deliveryFee,
-      total,
-      courier,
-      notes,
-      status: "pending_payment",
-      payment: {
-        provider: "paystack",
-        reference: paystackRef,
-      },
-    });
-
     // Initialize Paystack transaction
     const callbackUrl = `${process.env.FRONTEND_URL}/checkout/verify?ref=${paystackRef}`;
     const fallbackEmail = customer.email
@@ -97,6 +86,25 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       currency: "KES",
       callbackUrl,
       metadata,
+    });
+
+    // Create order in DB (pending_payment)
+    const order = await Order.create({
+      orderNumber,
+      customer: storedCustomer,
+      items,
+      subtotal,
+      deliveryFee,
+      total,
+      courier,
+      notes,
+      status: "pending_payment",
+      payment: {
+        provider: "paystack",
+        reference: paystackRef,
+        authorizationUrl: paystackRes?.data?.authorization_url,
+        accessCode: paystackRes?.data?.access_code,
+      },
     });
 
     // Queue order confirmation email (if email provided)
@@ -170,6 +178,12 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
       return;
     }
 
+    if (order.customer?.email) {
+      queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
+        console.error("Error queueing paid confirmation email:", err);
+      });
+    }
+
     res.json({
       success: true,
       data: {
@@ -215,8 +229,8 @@ export const paystackWebhook = async (req: Request, res: Response): Promise<void
     const { event, data } = payload;
 
     if (event === "charge.success") {
-      await Order.findOneAndUpdate(
-        { "payment.reference": data.reference },
+      const order = await Order.findOneAndUpdate(
+        { "payment.reference": data.reference, status: { $ne: "paid" } },
         {
           $set: {
             status: "paid",
@@ -224,8 +238,14 @@ export const paystackWebhook = async (req: Request, res: Response): Promise<void
             "payment.channel": data.channel,
             "payment.paystackRef": data.reference,
           },
-        }
+        },
+        { new: true }
       );
+      if (order?.customer?.email) {
+        queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
+          console.error("Error queueing webhook-paid confirmation email:", err);
+        });
+      }
     }
 
     res.sendStatus(200);
@@ -327,5 +347,120 @@ export const updateOrderStatus = async (req: Request<{ orderNumber: string }>, r
     res.json({ success: true, data: order });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to update order status" });
+  }
+};
+
+async function resolvePaymentUrl(order: any): Promise<string | undefined> {
+  if (order.payment?.authorizationUrl) return order.payment.authorizationUrl;
+  if (!order.payment?.reference) return undefined;
+
+  const callbackUrl = `${process.env.FRONTEND_URL}/checkout/verify?ref=${order.payment.reference}`;
+  const email = order.customer?.email || `${order.customer?.phone?.replace(/\s/g, "") || "guest"}@ddaily.co.ke`;
+
+  const paystackRes = await initializePayment({
+    email,
+    amount: order.total,
+    reference: order.payment.reference,
+    currency: "KES",
+    callbackUrl,
+    metadata: {
+      orderNumber: order.orderNumber,
+      customerName: order.customer?.name,
+      ...(order.customer?.phone ? { customerPhone: order.customer.phone } : {}),
+      ...(order.customer?.email ? { customerEmail: order.customer.email } : {}),
+    },
+  });
+
+  const paymentUrl = paystackRes?.data?.authorization_url;
+  if (paymentUrl) {
+    await Order.updateOne(
+      { orderNumber: order.orderNumber },
+      {
+        $set: {
+          "payment.authorizationUrl": paymentUrl,
+          "payment.accessCode": paystackRes.data.access_code,
+        },
+      }
+    );
+  }
+
+  return paymentUrl;
+}
+
+export const sendOrderPaymentReminder = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
+  try {
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    if (order.status !== "pending_payment") {
+      res.status(400).json({ success: false, message: "Payment reminders can only be sent for pending payment orders" });
+      return;
+    }
+
+    const to = order.customer?.email;
+    if (!to) {
+      res.status(400).json({ success: false, message: "Customer email is required to send a payment reminder" });
+      return;
+    }
+
+    const paymentUrl = await resolvePaymentUrl(order);
+    if (!paymentUrl) {
+      res.status(500).json({ success: false, message: "Unable to resolve payment URL" });
+      return;
+    }
+
+    await queueOrderPaymentReminderEmail(to, order, paymentUrl);
+    res.json({ success: true, message: "Payment reminder email sent" });
+  } catch (err) {
+    console.error("Payment reminder error:", err);
+    res.status(500).json({ success: false, message: "Failed to send payment reminder" });
+  }
+};
+
+export const sendOrderShippedNotification = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
+  try {
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    if (!order.customer?.email) {
+      res.status(400).json({ success: false, message: "Customer email is required to send shipment notification" });
+      return;
+    }
+
+    await queueOrderShippedNotificationEmail(order.customer.email, order);
+    res.json({ success: true, message: "Shipped notification email sent" });
+  } catch (err) {
+    console.error("Shipped notification error:", err);
+    res.status(500).json({ success: false, message: "Failed to send shipped notification" });
+  }
+};
+
+export const sendOrderDeliveredNotification = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
+  try {
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    if (!order.customer?.email) {
+      res.status(400).json({ success: false, message: "Customer email is required to send delivery notification" });
+      return;
+    }
+
+    await queueOrderDeliveredNotificationEmail(order.customer.email, order);
+    res.json({ success: true, message: "Delivery notification email sent" });
+  } catch (err) {
+    console.error("Delivery notification error:", err);
+    res.status(500).json({ success: false, message: "Failed to send delivery notification" });
   }
 };
