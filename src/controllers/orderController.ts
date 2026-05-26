@@ -270,6 +270,29 @@ export const getOrder = async (req: Request<{ orderNumber: string }>, res: Respo
   }
 };
 
+/** DELETE /api/admin/orders/:orderNumber  [admin] */
+export const deleteOrder = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
+  try {
+    const orderNumber = Array.isArray(req.params.orderNumber) ? req.params.orderNumber[0] : req.params.orderNumber;
+    const order = await Order.findOne({ orderNumber });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
+
+    if (order.status !== "pending_payment") {
+      res.status(400).json({ success: false, message: "Only pending payment orders can be deleted." });
+      return;
+    }
+
+    await Order.deleteOne({ orderNumber });
+    res.json({ success: true, message: "Pending order deleted successfully" });
+  } catch (err) {
+    console.error("Delete order error:", err);
+    res.status(500).json({ success: false, message: "Failed to delete order" });
+  }
+};
+
 /** GET /api/admin/orders  [admin] */
 export const getAllOrders = async (req: Request, res: Response): Promise<void> => {
   try {

@@ -16,6 +16,7 @@ import {
   verifyOrder,
   getOrder,
   getAllOrders,
+  deleteOrder,
   updateOrderStatus,
   paystackWebhook,
   sendOrderPaymentReminder,
@@ -187,6 +188,7 @@ router.get("/orders/:orderNumber", getOrder);
 
 // ─── Orders (admin) ───────────────────────────────────────────────────────────
 router.get("/admin/orders", requireAdmin, getAllOrders);
+router.delete("/admin/orders/:orderNumber", requireAdmin, deleteOrder);
 router.patch("/admin/orders/:orderNumber/status", requireAdmin, updateOrderStatus);
 router.post("/admin/orders/:orderNumber/email/payment-reminder", requireAdmin, sendOrderPaymentReminder);
 router.post("/admin/orders/:orderNumber/email/shipped", requireAdmin, sendOrderShippedNotification);
