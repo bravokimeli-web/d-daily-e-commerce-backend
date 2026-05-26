@@ -19,7 +19,7 @@ const orderItemSchema = z.object({
 const createOrderSchema = z.object({
   customer: z.object({
     name: z.string().min(1),
-    phone: z.string().min(9),
+    phone: z.string().min(9).optional(),
     email: z.string().email().optional().or(z.literal("")),
     city: z.string().min(1),
     address: z.string().min(1),
@@ -50,13 +50,18 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const orderNumber = generateOrderNumber();
     const paystackRef = generateReference(orderNumber);
 
+    const storedCustomer = {
+      name: customer.name,
+      ...(customer.phone ? { phone: customer.phone } : {}),
+      ...(customer.email ? { email: customer.email } : {}),
+      city: customer.city,
+      address: customer.address,
+    };
+
     // Create order in DB (pending_payment)
     const order = await Order.create({
       orderNumber,
-      customer: {
-        ...customer,
-        email: customer.email || undefined,
-      },
+      customer: storedCustomer,
       items,
       subtotal,
       deliveryFee,
@@ -72,7 +77,18 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
 
     // Initialize Paystack transaction
     const callbackUrl = `${process.env.FRONTEND_URL}/checkout/verify?ref=${paystackRef}`;
-    const email = customer.email || `${customer.phone.replace(/\s/g, "")}@ddaily.co.ke`;
+    const fallbackEmail = customer.email
+      ? customer.email
+      : customer.phone
+      ? `${customer.phone.replace(/\s/g, "")}@ddaily.co.ke`
+      : `guest+${orderNumber}@ddaily.co.ke`;
+    const email = customer.email || fallbackEmail;
+    const metadata: Record<string, unknown> = {
+      orderNumber,
+      customerName: customer.name,
+    };
+    if (customer.phone) metadata.customerPhone = customer.phone;
+    if (customer.email) metadata.customerEmail = customer.email;
 
     const paystackRes = await initializePayment({
       email,
@@ -80,11 +96,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       reference: paystackRef,
       currency: "KES",
       callbackUrl,
-      metadata: {
-        orderNumber,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-      },
+      metadata,
     });
 
     // Queue order confirmation email (if email provided)

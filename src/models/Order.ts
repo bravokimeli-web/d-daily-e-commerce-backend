@@ -19,7 +19,7 @@ export interface IOrderItem {
 
 export interface ICustomer {
   name: string;
-  phone: string;
+  phone?: string;
   email?: string;
   city: string;
   address: string;
@@ -51,7 +51,7 @@ const OrderSchema = new Schema<IOrder>(
     orderNumber: { type: String, required: true, unique: true },
     customer: {
       name: { type: String, required: true },
-      phone: { type: String, required: true },
+      phone: { type: String },
       email: { type: String },
       city: { type: String, required: true },
       address: { type: String, required: true },
