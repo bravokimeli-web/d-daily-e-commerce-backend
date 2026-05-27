@@ -108,8 +108,13 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       },
     });
 
-    // Do not send customer order confirmation until payment is verified.
-    // The customer will receive confirmation once Paystack reports success.
+    // Send pending-payment email to the customer so they are reminded to complete payment.
+    if (customer.email) {
+      const paymentUrl = paystackRes?.data?.authorization_url;
+      queueOrderConfirmationEmail(customer.email, order, paymentUrl).catch((err) => {
+        console.error("Error queueing pending order confirmation email:", err);
+      });
+    }
 
     const adminSubject = order.status === "pending_payment"
       ? `New pending payment order: ${order.orderNumber}`
