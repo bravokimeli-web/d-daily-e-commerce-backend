@@ -9,6 +9,8 @@ export interface IProduct extends Document {
   originalPrice?: number;
   category: Category;
   image: string; // URL or path
+  images?: string[];
+  video?: string;
   imageVariants?: {
     thumbnail?: string;
     medium?: string;
@@ -20,6 +22,7 @@ export interface IProduct extends Document {
   usage: string[];
   safety: string[];
   specs: { label: string; value: string }[];
+  variants?: { id: string; label: string; price: number; originalPrice?: number }[];
   badge?: string;
   stock: number;
   isActive: boolean;
@@ -39,6 +42,8 @@ const ProductSchema = new Schema<IProduct>(
       enum: ["lighting", "home-protection", "farm-protection", "fashion-design"],
     },
     image: { type: String, required: true },
+    images: [{ type: String }],
+    video: { type: String },
     imageVariants: {
       thumbnail: { type: String },
       medium: { type: String },
@@ -53,6 +58,14 @@ const ProductSchema = new Schema<IProduct>(
       {
         label: { type: String, required: true },
         value: { type: String, required: true },
+      },
+    ],
+    variants: [
+      {
+        id: { type: String, required: true },
+        label: { type: String, required: true },
+        price: { type: Number, required: true, min: 0 },
+        originalPrice: { type: Number, min: 0 },
       },
     ],
     badge: { type: String },

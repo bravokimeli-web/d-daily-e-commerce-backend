@@ -22,30 +22,39 @@ cloudinary.config({
 
 const productImageStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: "d-daily/products",
-    format: "auto",
-    public_id: (req: Express.Request, file: Express.Multer.File) => `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-  } as any,
+  params: (_req: Express.Request, _file: Express.Multer.File) =>
+    ({
+      folder: "d-daily/products",
+      resource_type: "auto",
+      public_id: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
+    } as any),
 });
 
 const productImageMulter = multer({
   storage: productImageStorage,
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype);
+    const ok = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+    ].includes(file.mimetype);
     if (ok) cb(null, true);
-    else cb(new Error("Only JPEG, PNG, WebP, and GIF files are allowed"));
+    else cb(new Error("Only JPEG, PNG, WebP, GIF, MP4, WEBM, and MOV files are allowed"));
   },
 });
 
 /** Multer middleware: field name `image` */
 export const uploadProductImage = (req: Request, res: Response, next: NextFunction): void => {
-  productImageMulter.single("image")(req, res, (err: unknown) => {
+  productImageMulter.single("media")(req, res, (err: unknown) => {
     if (err instanceof multer.MulterError) {
       res.status(400).json({
         success: false,
-        message: err.code === "LIMIT_FILE_SIZE" ? "Image too large (max 8MB)" : err.message,
+        message: err.code === "LIMIT_FILE_SIZE" ? "File too large (max 25MB)" : err.message,
       });
       return;
     }
@@ -71,37 +80,41 @@ export const completeProductImageUpload = async (req: Request, res: Response): P
   try {
     const publicId = file.filename;
     const secureUrl = file.path;
+    const isVideo = file.mimetype.startsWith("video/");
 
-    const variants = {
-      thumbnail: cloudinary.url(publicId, {
-        width: 150,
-        height: 150,
-        crop: "fill",
-        quality: "auto",
-        fetch_format: "auto",
-      }),
-      medium: cloudinary.url(publicId, {
-        width: 400,
-        height: 400,
-        crop: "fill",
-        quality: "auto",
-        fetch_format: "auto",
-      }),
-      original: cloudinary.url(publicId, {
-        quality: "auto",
-        fetch_format: "auto",
-      }),
-      webp: cloudinary.url(publicId, {
-        quality: "auto",
-        fetch_format: "auto",
-        format: "webp",
-      }),
-    };
+    const variants = isVideo
+      ? undefined
+      : {
+          thumbnail: cloudinary.url(publicId, {
+            width: 150,
+            height: 150,
+            crop: "fill",
+            quality: "auto",
+            fetch_format: "auto",
+          }),
+          medium: cloudinary.url(publicId, {
+            width: 400,
+            height: 400,
+            crop: "fill",
+            quality: "auto",
+            fetch_format: "auto",
+          }),
+          original: cloudinary.url(publicId, {
+            quality: "auto",
+            fetch_format: "auto",
+          }),
+          webp: cloudinary.url(publicId, {
+            quality: "auto",
+            fetch_format: "auto",
+            format: "webp",
+          }),
+        };
 
     res.status(201).json({
       success: true,
       data: {
         url: secureUrl,
+        mediaType: isVideo ? "video" : "image",
         variants,
       },
     });
@@ -120,6 +133,8 @@ const productSchema = z.object({
   originalPrice: z.number().min(0).optional(),
   category: z.enum(["lighting", "home-protection", "farm-protection", "fashion-design"]),
   image: z.string().min(1),
+  images: z.array(z.string()).default([]),
+  video: z.string().optional(),
   imageVariants: z.object({
     thumbnail: z.string().optional(),
     medium: z.string().optional(),
@@ -131,6 +146,14 @@ const productSchema = z.object({
   usage: z.array(z.string()).default([]),
   safety: z.array(z.string()).default([]),
   specs: z.array(z.object({ label: z.string(), value: z.string() })).default([]),
+  variants: z.array(
+    z.object({
+      id: z.string().min(1),
+      label: z.string().min(1),
+      price: z.number().min(0),
+      originalPrice: z.number().min(0).optional(),
+    })
+  ).default([]),
   badge: z.string().optional(),
   stock: z.number().int().min(0).default(0),
 });
