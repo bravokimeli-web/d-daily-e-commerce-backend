@@ -44,7 +44,10 @@ const productImageMulter = multer({
 
 /** Multer middleware: field name `media` */
 export const uploadProductImage = (req: Request, res: Response, next: NextFunction): void => {
-  productImageMulter.single("media")(req, res, (err: unknown) => {
+  productImageMulter.fields([
+    { name: "media", maxCount: 1 },
+    { name: "image", maxCount: 1 }, // backward-compatible legacy field name
+  ])(req, res, (err: unknown) => {
     if (err instanceof multer.MulterError) {
       res.status(400).json({
         success: false,
@@ -59,6 +62,15 @@ export const uploadProductImage = (req: Request, res: Response, next: NextFuncti
       });
       return;
     }
+
+    const files = req.files as
+      | Record<string, Express.Multer.File[]>
+      | undefined;
+    const picked = files?.media?.[0] ?? files?.image?.[0];
+    if (picked) {
+      (req as Request & { file?: Express.Multer.File }).file = picked;
+    }
+
     next();
   });
 };
