@@ -99,6 +99,15 @@ export const completeProductImageUpload = async (req: Request, res: Response): P
     return;
   }
 
+  if (!cloudName || !cloudApiKey || !cloudApiSecret) {
+    res.status(500).json({
+      success: false,
+      message:
+        "Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in backend .env and restart the server.",
+    });
+    return;
+  }
+
   try {
     const publicId = file.filename;
     const secureUrl = file.path;
