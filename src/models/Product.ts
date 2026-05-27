@@ -22,7 +22,7 @@ export interface IProduct extends Document {
   usage: string[];
   safety: string[];
   specs: { label: string; value: string }[];
-  variants?: { id: string; label: string; price: number; originalPrice?: number }[];
+  variants?: { id: string; label: string; price: number; originalPrice?: number; stock?: number }[];
   badge?: string;
   stock: number;
   isActive: boolean;
@@ -66,6 +66,7 @@ const ProductSchema = new Schema<IProduct>(
         label: { type: String, required: true },
         price: { type: Number, required: true, min: 0 },
         originalPrice: { type: Number, min: 0 },
+        stock: { type: Number, min: 0, default: 0 },
       },
     ],
     badge: { type: String },

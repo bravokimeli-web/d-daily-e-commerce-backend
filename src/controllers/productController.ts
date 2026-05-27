@@ -152,6 +152,7 @@ const productSchema = z.object({
       label: z.string().min(1),
       price: z.number().min(0),
       originalPrice: z.number().min(0).optional(),
+      stock: z.number().int().min(0).optional(),
     })
   ).default([]),
   badge: z.string().optional(),
