@@ -107,13 +107,8 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       },
     });
 
-    // Queue order confirmation email (if email provided)
-    if (customer.email) {
-      const paymentUrl = paystackRes?.data?.authorization_url;
-      queueOrderConfirmationEmail(customer.email, order, paymentUrl).catch((err) => {
-        console.error("Error queueing order confirmation email:", err);
-      });
-    }
+    // Do not send customer order confirmation until payment is verified.
+    // The customer will receive confirmation once Paystack reports success.
 
     // Queue admin notification for new order
     queueAdminNotification(`New order: ${order.orderNumber}`, `New order <strong>${order.orderNumber}</strong> for KES ${order.total}.`).catch((err) => {
@@ -161,7 +156,7 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
 
     // Update order status to paid
     const order = await Order.findOneAndUpdate(
-      { "payment.reference": reference },
+      { "payment.reference": reference, status: "pending_payment" },
       {
         $set: {
           status: "paid",
@@ -174,6 +169,20 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
     );
 
     if (!order) {
+      const existingOrder = await Order.findOne({ "payment.reference": reference });
+      if (existingOrder) {
+        res.json({
+          success: true,
+          data: {
+            orderNumber: existingOrder.orderNumber,
+            status: existingOrder.status,
+            total: existingOrder.total,
+            paidAt: existingOrder.payment?.paidAt,
+          },
+        });
+        return;
+      }
+
       res.status(404).json({ success: false, message: "Order not found for this reference" });
       return;
     }
