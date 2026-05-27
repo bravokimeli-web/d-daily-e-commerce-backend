@@ -34,21 +34,15 @@ const productImageMulter = multer({
   storage: productImageStorage,
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const ok = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-      "image/gif",
-      "video/mp4",
-      "video/webm",
-      "video/quicktime",
-    ].includes(file.mimetype);
+    const mime = (file.mimetype || "").toLowerCase();
+    const extOk = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|mp4|webm|mov|m4v|avi)$/i.test(file.originalname || "");
+    const ok = mime.startsWith("image/") || mime.startsWith("video/") || extOk;
     if (ok) cb(null, true);
-    else cb(new Error("Only JPEG, PNG, WebP, GIF, MP4, WEBM, and MOV files are allowed"));
+    else cb(new Error(`Unsupported file type (${mime || "unknown"}). Upload image or video files.`));
   },
 });
 
-/** Multer middleware: field name `image` */
+/** Multer middleware: field name `media` */
 export const uploadProductImage = (req: Request, res: Response, next: NextFunction): void => {
   productImageMulter.single("media")(req, res, (err: unknown) => {
     if (err instanceof multer.MulterError) {
