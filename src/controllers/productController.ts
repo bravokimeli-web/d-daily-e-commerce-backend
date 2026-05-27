@@ -56,9 +56,25 @@ export const uploadProductImage = (req: Request, res: Response, next: NextFuncti
       return;
     }
     if (err) {
+      const details =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : (() => {
+              try {
+                return JSON.stringify(err);
+              } catch {
+                return "Unknown upload error";
+              }
+            })();
+      console.error("Product upload middleware error:", {
+        details,
+        contentType: req.headers["content-type"],
+      });
       res.status(400).json({
         success: false,
-        message: err instanceof Error ? err.message : "Invalid file",
+        message: `Upload rejected: ${details}`,
       });
       return;
     }
