@@ -9,6 +9,7 @@ import {
 } from "../utils/emailJobs";
 import { generateOrderNumber } from "../utils/helpers";
 import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
+import { renderAdminNotification } from "../utils/emailTemplates";
 import { z } from "zod";
 import crypto from "crypto";
 
@@ -110,8 +111,14 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     // Do not send customer order confirmation until payment is verified.
     // The customer will receive confirmation once Paystack reports success.
 
-    // Queue admin notification for new order
-    queueAdminNotification(`New order: ${order.orderNumber}`, `New order <strong>${order.orderNumber}</strong> for KES ${order.total}.`).catch((err) => {
+    const adminSubject = order.status === "pending_payment"
+      ? `New pending payment order: ${order.orderNumber}`
+      : `New order: ${order.orderNumber}`;
+
+    queueAdminNotification(
+      adminSubject,
+      renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
+    ).catch((err) => {
       console.error("Failed to queue admin notification for new order:", err);
     });
 
@@ -193,6 +200,13 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
       });
     }
 
+    queueAdminNotification(
+      `Order paid — ${order.orderNumber}`,
+      renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
+    ).catch((err) => {
+      console.error("Failed to queue admin notification for paid order:", err);
+    });
+
     res.json({
       success: true,
       data: {
@@ -253,6 +267,15 @@ export const paystackWebhook = async (req: Request, res: Response): Promise<void
       if (order?.customer?.email) {
         queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
           console.error("Error queueing webhook-paid confirmation email:", err);
+        });
+      }
+
+      if (order) {
+        queueAdminNotification(
+          `Order paid — ${order.orderNumber}`,
+          renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
+        ).catch((err) => {
+          console.error("Failed to queue admin notification for webhook-paid order:", err);
         });
       }
     }

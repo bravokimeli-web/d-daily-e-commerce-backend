@@ -179,17 +179,37 @@ export function renderResellerStatus(reseller: any) {
 
 export function renderAdminNotification(type: "order" | "reseller", payload: any) {
   if (type === "order") {
+    const status = payload.status || "pending_payment";
+    const statusLabel = status === "paid" ? "Paid" : "Pending payment";
+    const statusHeadline = status === "paid" ? "✅ Order paid" : "📦 New order pending payment";
+    const customerName = payload.customer?.name || payload.customer?.phone || "Unknown";
+    const items = (payload.items || [])
+      .map((item: any) => `<li>${escapeHtml(item.name)} × ${item.qty} — KES ${Number(item.price).toLocaleString()}</li>`)
+      .join("\n");
+
     return `
-    <div style="font-family: Arial, sans-serif; color: #333;">
-      <h2>📦 New Order Received</h2>
+    <div style="font-family: Arial, sans-serif; color: #333; max-width: 700px;">
+      <h2>${statusHeadline}</h2>
       <p><strong>Order Number:</strong> ${escapeHtml(payload.orderNumber)}</p>
-      <p><strong>Customer:</strong> ${escapeHtml(payload.customer?.name || payload.customer?.phone || "Unknown")}</p>
-      <p><strong>Email:</strong> ${escapeHtml(payload.customer?.email || "N/A")}</p>
+      <p><strong>Status:</strong> ${escapeHtml(statusLabel)}</p>
       <p><strong>Total Amount:</strong> KES ${Number(payload.total).toLocaleString()}</p>
-      <p><a href="${escapeHtml(payload.adminUrl || "")}" style="background: #ff6d00; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">View Order in Admin</a></p>
+      <h3>Customer details</h3>
+      <p><strong>Name:</strong> ${escapeHtml(payload.customer?.name || "N/A")}</p>
+      <p><strong>Email:</strong> ${escapeHtml(payload.customer?.email || "N/A")}</p>
+      <p><strong>Phone:</strong> ${escapeHtml(payload.customer?.phone || "N/A")}</p>
+      <p><strong>City:</strong> ${escapeHtml(payload.customer?.city || "N/A")}</p>
+      <p><strong>Address:</strong> ${escapeHtml(payload.customer?.address || "N/A")}</p>
+      <h3>Ordered products</h3>
+      <ul style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
+        ${items}
+      </ul>
+      ${payload.payment?.reference ? `<p><strong>Payment reference:</strong> ${escapeHtml(payload.payment.reference)}</p>` : ""}
+      ${payload.payment?.authorizationUrl ? `<p><strong>Payment URL:</strong> <a href="${escapeHtml(payload.payment.authorizationUrl)}">Open payment link</a></p>` : ""}
+      <p><em>Admin note: this order was created and is ${status === "paid" ? "already paid" : "awaiting payment"}.</em></p>
     </div>
     `;
   }
+
   return `
   <div style="font-family: Arial, sans-serif; color: #333;">
     <h2>👤 New Reseller Application</h2>
