@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-export type Category = "lighting" | "home-protection" | "farm-protection" | "fashion-design";
+export type Category = string;
 
 export interface IProduct extends Document {
   slug: string;
@@ -39,7 +39,6 @@ const ProductSchema = new Schema<IProduct>(
     category: {
       type: String,
       required: true,
-      enum: ["lighting", "home-protection", "farm-protection", "fashion-design"],
     },
     image: { type: String, required: true },
     images: [{ type: String }],

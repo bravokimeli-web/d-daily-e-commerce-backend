@@ -162,7 +162,7 @@ const productSchema = z.object({
   name: z.string().min(1),
   price: z.number().nullable(),
   originalPrice: z.number().min(0).optional(),
-  category: z.enum(["lighting", "home-protection", "farm-protection", "fashion-design"]),
+  category: z.string().min(1),
   image: z.string().min(1),
   images: z.array(z.string()).default([]),
   video: z.string().optional(),
