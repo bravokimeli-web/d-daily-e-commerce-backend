@@ -261,7 +261,15 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
   try {
     const parsed = productSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      const errs = parsed.error.flatten().fieldErrors;
+      const details = Object.entries(errs)
+        .map(([field, msgs]) => `${field}: ${msgs?.join(", ")}`)
+        .join("; ");
+      res.status(400).json({
+        success: false,
+        message: `Validation failed: ${details}`,
+        errors: parsed.error.flatten(),
+      });
       return;
     }
 
@@ -285,7 +293,15 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
     const parsed = productSchema.partial().safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, errors: parsed.error.flatten() });
+      const errs = parsed.error.flatten().fieldErrors;
+      const details = Object.entries(errs)
+        .map(([field, msgs]) => `${field}: ${msgs?.join(", ")}`)
+        .join("; ");
+      res.status(400).json({
+        success: false,
+        message: `Validation failed: ${details}`,
+        errors: parsed.error.flatten(),
+      });
       return;
     }
 
