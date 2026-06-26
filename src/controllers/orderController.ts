@@ -157,6 +157,7 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
         status: order.status,
         total: order.total,
         paidAt: order.payment?.paidAt,
+        customerPhone: order.payment?.customerPhone || order.customer?.phone || null,
       },
     });
   } catch (err) {
