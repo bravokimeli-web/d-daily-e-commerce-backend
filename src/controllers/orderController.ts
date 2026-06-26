@@ -8,7 +8,7 @@ import {
   queueAdminNotification,
 } from "../utils/emailJobs";
 import { generateOrderNumber } from "../utils/helpers";
-import { initiateStkPush, parseStkCallback, generateReference } from "../utils/mpesa";
+import { initiateStkPush, parseStkCallback, generateReference, queryStkPushStatus, describeStkResult } from "../utils/mpesa";
 import { renderAdminNotification } from "../utils/emailTemplates";
 import { z } from "zod";
 
@@ -147,6 +147,92 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
   } catch (err) {
     console.error("Create order error:", err);
     res.status(500).json({ success: false, message: "Failed to create order" });
+  }
+};
+
+/** GET /api/orders/payment-status/:reference — Poll order + STK query status */
+export const getPaymentStatus = async (req: Request<{ reference: string }>, res: Response): Promise<void> => {
+  try {
+    const referenceParam = req.params.reference;
+    const reference = Array.isArray(referenceParam) ? referenceParam[0] : referenceParam;
+
+    const order = await Order.findOne({ "payment.reference": reference });
+    if (!order) {
+      res.status(404).json({ success: false, message: "Order not found for this reference" });
+      return;
+    }
+
+    const baseData = {
+      orderNumber: order.orderNumber,
+      status: order.status,
+      total: order.total,
+      paidAt: order.payment?.paidAt,
+      customerPhone: order.payment?.customerPhone || order.customer?.phone || null,
+    };
+
+    if (order.status === "paid") {
+      res.json({ success: true, data: { ...baseData, stkResultCode: 0, stkResultDesc: "Paid" } });
+      return;
+    }
+
+    const checkoutRequestID = order.payment?.checkoutRequestID;
+    if (!checkoutRequestID) {
+      res.json({ success: true, data: baseData });
+      return;
+    }
+
+    try {
+      const stk = await queryStkPushStatus(checkoutRequestID);
+      const resultCode = Number(stk.ResultCode);
+      const promptFailed = Number.isFinite(resultCode) && resultCode !== 0 && resultCode !== 4999;
+
+      if (resultCode === 0) {
+        const updated = await Order.findOneAndUpdate(
+          { _id: order._id, status: { $ne: "paid" } },
+          {
+            $set: {
+              status: "paid",
+              "payment.paidAt": new Date(),
+              "payment.channel": "mpesa",
+              "payment.merchantRequestID": stk.MerchantRequestID,
+            },
+          },
+          { new: true }
+        );
+
+        if (updated) {
+          res.json({
+            success: true,
+            data: {
+              orderNumber: updated.orderNumber,
+              status: "paid",
+              total: updated.total,
+              paidAt: updated.payment?.paidAt,
+              customerPhone: updated.payment?.customerPhone || updated.customer?.phone || null,
+              stkResultCode: 0,
+              stkResultDesc: stk.ResultDesc,
+            },
+          });
+          return;
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          ...baseData,
+          stkResultCode: Number.isFinite(resultCode) ? resultCode : null,
+          stkResultDesc: promptFailed ? describeStkResult(resultCode, stk.ResultDesc) : stk.ResultDesc,
+          promptFailed,
+        },
+      });
+    } catch (stkErr) {
+      console.error("STK query error:", stkErr);
+      res.json({ success: true, data: baseData });
+    }
+  } catch (err) {
+    console.error("Payment status error:", err);
+    res.status(500).json({ success: false, message: "Failed to check payment status" });
   }
 };
 

@@ -14,6 +14,7 @@ import {
 import {
   createOrder,
   verifyOrder,
+  getPaymentStatus,
   getOrder,
   getAllOrders,
   deleteOrder,
@@ -42,6 +43,7 @@ import { requireAdmin } from "../middleware/auth";
 import multer from "multer";
 import { redis } from "../lib/redis";
 import { Product } from "../models/Product";
+import { getMpesaConfigInfo } from "../utils/mpesa";
 
 
 const loginLimiter = rateLimit({
@@ -65,6 +67,10 @@ const router = Router();
 // ─── Health ────────────────────────────────────────────────────────────────────
 router.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+router.get("/health/mpesa", (_req, res) => {
+  res.json({ success: true, data: getMpesaConfigInfo() });
 });
 
 router.get("/health/full", async (_req, res) => {
@@ -183,6 +189,7 @@ router.delete("/admin/products/:slug", requireAdmin, deleteProduct);
 
 // ─── Orders (public) ──────────────────────────────────────────────────────────
 router.post("/orders", orderLimiter, createOrder);
+router.get("/orders/payment-status/:reference", getPaymentStatus);
 router.get("/orders/verify/:reference", verifyOrder);
 router.get("/orders/:orderNumber", getOrder);
 

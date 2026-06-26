@@ -23,7 +23,7 @@ services:
       - key: MPESA_CALLBACK_URL
         value: https://api.ddaily.co.ke/api/webhooks/mpesa
       - key: MPESA_TRANSACTION_TYPE
-        value: CustomerPayBillOnline
+        value: CustomerBuyGoodsOnline
       - key: FRONTEND_URL
         value: https://www.ddaily.co.ke
       - key: JWT_SECRET
