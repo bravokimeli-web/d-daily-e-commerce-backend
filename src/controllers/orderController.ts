@@ -31,6 +31,7 @@ const createOrderSchema = z.object({
     city: z.string().min(1),
     address: z.string().min(1),
   }),
+  mpesaPhone: z.string().min(9).optional().or(z.literal("")),
   items: z.array(orderItemSchema).min(1),
   courier: z.string().default("Swatin"),
   notes: z.string().optional(),
@@ -47,7 +48,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const { customer, items, courier, notes } = parsed.data;
+    const { customer, mpesaPhone, items, courier, notes } = parsed.data;
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
@@ -75,7 +76,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     try {
       mpesaRes = await initiateStkPush({
         amount: total,
-        phone: customer.phone,
+        phone: mpesaPhone || customer.phone,
         accountReference: orderNumber,
         transactionDesc: `Payment for D-Daily order ${orderNumber}`,
         callbackUrl,
@@ -104,7 +105,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
         reference: mpesaRef,
         checkoutRequestID: mpesaRes.CheckoutRequestID,
         merchantRequestID: mpesaRes.MerchantRequestID,
-        customerPhone: customer.phone,
+        customerPhone: mpesaPhone || customer.phone,
       },
     });
 

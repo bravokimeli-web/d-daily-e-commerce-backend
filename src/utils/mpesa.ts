@@ -6,6 +6,7 @@ const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET?.trim();
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE?.trim();
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY?.trim();
 const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL?.trim();
+const MPESA_TRANSACTION_TYPE = process.env.MPESA_TRANSACTION_TYPE?.trim() || "CustomerPayBillOnline";
 
 export interface MpesaAccessTokenResponse {
   access_token: string;
@@ -62,23 +63,35 @@ function getTimestamp(): string {
 
 async function getAccessToken(): Promise<string> {
   if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET) {
-    throw new Error("Missing MPESA consumer key or secret.");
+    throw new Error("Missing MPESA consumer key or secret in environment variables.");
   }
 
   const credentials = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString("base64");
   const url = `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
 
-  const response = await axios.get<MpesaAccessTokenResponse>(url, {
-    headers: {
-      Authorization: `Basic ${credentials}`,
-    },
-  });
+  try {
+    const response = await axios.get<MpesaAccessTokenResponse>(url, {
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-  if (!response.data?.access_token) {
-    throw new Error("Failed to obtain M-Pesa access token.");
+    if (!response.data?.access_token) {
+      throw new Error("Failed to obtain M-Pesa access token (empty response).");
+    }
+
+    return response.data.access_token;
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const safaricomError = error.response?.data;
+      console.error("Safaricom OAuth Error:", safaricomError || error.message);
+      throw new Error(
+        `M-Pesa Access Token error: ${safaricomError?.errorMessage || safaricomError?.message || error.message}`
+      );
+    }
+    throw error;
   }
-
-  return response.data.access_token;
 }
 
 function getPassword(timestamp: string): string {
@@ -105,37 +118,50 @@ export const initiateStkPush = async (params: {
     throw new Error("Missing MPESA callback URL. Set MPESA_CALLBACK_URL in the environment.");
   }
 
-  const response = await axios.post<MpesaStkPushResponse>(
-    `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
-    {
-      BusinessShortCode: MPESA_SHORTCODE,
-      Password: password,
-      Timestamp: timestamp,
-      TransactionType: "CustomerPayBillOnline",
-      Amount: Math.round(params.amount),
-      PartyA: normalizedPhone,
-      PartyB: MPESA_SHORTCODE,
-      PhoneNumber: normalizedPhone,
-      CallBackURL: callbackUrl,
-      AccountReference: params.accountReference,
-      TransactionDesc: params.transactionDesc,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  const payload = {
+    BusinessShortCode: MPESA_SHORTCODE,
+    Password: password,
+    Timestamp: timestamp,
+    TransactionType: MPESA_TRANSACTION_TYPE,
+    Amount: Math.round(params.amount),
+    PartyA: normalizedPhone,
+    PartyB: MPESA_SHORTCODE,
+    PhoneNumber: normalizedPhone,
+    CallBackURL: callbackUrl,
+    AccountReference: params.accountReference,
+    TransactionDesc: params.transactionDesc,
+  };
 
-  const data = response.data;
-  if (!data || data.ResponseCode !== "0") {
-    throw new Error(
-      `M-Pesa STK push failed${data?.ResponseCode ? ` (${data.ResponseCode})` : ""}: ${data?.ResponseDescription || data?.CustomerMessage || "Unknown error"}`
+  try {
+    const response = await axios.post<MpesaStkPushResponse>(
+      `${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
-  }
 
-  return data;
+    const data = response.data;
+    if (!data || data.ResponseCode !== "0") {
+      throw new Error(
+        `M-Pesa STK push failed${data?.ResponseCode ? ` (${data.ResponseCode})` : ""}: ${data?.ResponseDescription || data?.CustomerMessage || "Unknown error"}`
+      );
+    }
+
+    return data;
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const safaricomError = error.response?.data;
+      console.error("Safaricom STK Push Error:", safaricomError || error.message);
+      throw new Error(
+        `M-Pesa STK Push error: ${safaricomError?.errorMessage || safaricomError?.message || error.message}`
+      );
+    }
+    throw error;
+  }
 };
 
 export const generateReference = (orderNumber: string) => `MPESA-${orderNumber}-${Date.now()}`;
