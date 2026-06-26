@@ -180,6 +180,12 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
 /** POST /api/orders/webhook — M-Pesa webhook handler */
 export const mpesaWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
+    if (!req.body || typeof req.body !== "object" || !req.body.Body?.stkCallback) {
+      console.warn("M-Pesa webhook received invalid or unexpected payload:", req.body);
+      res.status(200).json({ success: false, message: "Invalid M-Pesa callback payload ignored." });
+      return;
+    }
+
     const callbackPayload = parseStkCallback(req.body);
 
     if (callbackPayload.resultCode !== 0) {
@@ -204,25 +210,35 @@ export const mpesaWebhook = async (req: Request, res: Response): Promise<void> =
       { new: true }
     );
 
-    if (order?.customer?.email) {
+    if (!order) {
+      console.warn("M-Pesa webhook callback received for unknown or already-paid checkoutRequestID:", callbackPayload.checkoutRequestID);
+      res.sendStatus(200);
+      return;
+    }
+
+    if (order.customer?.email) {
       queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
         console.error("Error queueing webhook-paid confirmation email:", err);
       });
     }
 
-    if (order) {
-      queueAdminNotification(
-        `Order paid — ${order.orderNumber}`,
-        renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
-      ).catch((err) => {
-        console.error("Failed to queue admin notification for webhook-paid order:", err);
-      });
-    }
+    queueAdminNotification(
+      `Order paid — ${order.orderNumber}`,
+      renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
+    ).catch((err) => {
+      console.error("Failed to queue admin notification for webhook-paid order:", err);
+    });
 
     res.sendStatus(200);
   } catch (err) {
+    if (err instanceof Error && err.message.includes("Invalid M-Pesa callback payload")) {
+      console.warn("M-Pesa webhook ignored invalid payload:", err.message);
+      res.status(200).json({ success: false, message: "Invalid M-Pesa callback payload ignored." });
+      return;
+    }
+
     console.error("M-Pesa webhook error:", err);
-    res.sendStatus(500);
+    res.status(500).json({ success: false, message: "Internal webhook error" });
   }
 };
 
