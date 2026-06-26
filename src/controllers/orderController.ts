@@ -71,13 +71,23 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const mpesaRes = await initiateStkPush({
-      amount: total,
-      phone: customer.phone,
-      accountReference: orderNumber,
-      transactionDesc: `Payment for D-Daily order ${orderNumber}`,
-      callbackUrl,
-    });
+    let mpesaRes;
+    try {
+      mpesaRes = await initiateStkPush({
+        amount: total,
+        phone: customer.phone,
+        accountReference: orderNumber,
+        transactionDesc: `Payment for D-Daily order ${orderNumber}`,
+        callbackUrl,
+      });
+    } catch (mpesaErr) {
+      console.error("M-Pesa STK push initiation failed:", mpesaErr);
+      res.status(502).json({
+        success: false,
+        message: mpesaErr instanceof Error ? mpesaErr.message : "M-Pesa STK push could not be initiated.",
+      });
+      return;
+    }
 
     const order = await Order.create({
       orderNumber,

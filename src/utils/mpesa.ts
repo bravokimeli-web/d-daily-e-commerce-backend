@@ -113,7 +113,14 @@ export const initiateStkPush = async (params: {
     }
   );
 
-  return response.data;
+  const data = response.data;
+  if (!data || data.ResponseCode !== "0") {
+    throw new Error(
+      `M-Pesa STK push failed${data?.ResponseCode ? ` (${data.ResponseCode})` : ""}: ${data?.ResponseDescription || data?.CustomerMessage || "Unknown error"}`
+    );
+  }
+
+  return data;
 };
 
 export const generateReference = (orderNumber: string) => `MPESA-${orderNumber}-${Date.now()}`;
