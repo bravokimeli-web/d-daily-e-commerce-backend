@@ -60,7 +60,7 @@ export async function sendOrderConfirmation(to: string, order: any, paymentUrl?:
   }
 }
 
-export async function sendOrderPaymentReminderEmail(to: string, order: any, paymentUrl: string) {
+export async function sendOrderPaymentReminderEmail(to: string, order: any, paymentUrl?: string) {
   const html = renderOrderPaymentReminder(order, paymentUrl);
   const subject = `Payment reminder — order ${order.orderNumber}`;
   try {

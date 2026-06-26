@@ -8,10 +8,10 @@ import {
   queueAdminNotification,
 } from "../utils/emailJobs";
 import { generateOrderNumber } from "../utils/helpers";
-import { initializePayment, verifyPayment, generateReference } from "../utils/paystack";
+import { initiateStkPush, parseStkCallback, generateReference } from "../utils/mpesa";
 import { renderAdminNotification } from "../utils/emailTemplates";
 import { z } from "zod";
-import crypto from "crypto";
+
 
 // ─── Validation schemas ────────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ const orderItemSchema = z.object({
 const createOrderSchema = z.object({
   customer: z.object({
     name: z.string().min(1),
-    phone: z.string().min(9).optional(),
+    phone: z.string().min(9),
     email: z.string().email().optional().or(z.literal("")),
     city: z.string().min(1),
     address: z.string().min(1),
@@ -38,7 +38,7 @@ const createOrderSchema = z.object({
 
 // ─── Controllers ───────────────────────────────────────────────────────────────
 
-/** POST /api/orders — Create order & initialize Paystack payment */
+/** POST /api/orders — Create order & initialize M-Pesa STK Push */
 export const createOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = createOrderSchema.safeParse(req.body);
@@ -55,41 +55,30 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
     const total = subtotal + deliveryFee;
 
     const orderNumber = generateOrderNumber();
-    const paystackRef = generateReference(orderNumber);
+    const mpesaRef = generateReference(orderNumber);
 
     const storedCustomer = {
       name: customer.name,
-      ...(customer.phone ? { phone: customer.phone } : {}),
+      phone: customer.phone,
       ...(customer.email ? { email: customer.email } : {}),
       city: customer.city,
       address: customer.address,
     };
 
-    // Initialize Paystack transaction
-    const callbackUrl = `${process.env.FRONTEND_URL}/checkout/verify?ref=${paystackRef}`;
-    const fallbackEmail = customer.email
-      ? customer.email
-      : customer.phone
-      ? `${customer.phone.replace(/\s/g, "")}@ddaily.co.ke`
-      : `guest+${orderNumber}@ddaily.co.ke`;
-    const email = customer.email || fallbackEmail;
-    const metadata: Record<string, unknown> = {
-      orderNumber,
-      customerName: customer.name,
-    };
-    if (customer.phone) metadata.customerPhone = customer.phone;
-    if (customer.email) metadata.customerEmail = customer.email;
+    const callbackUrl = process.env.MPESA_CALLBACK_URL?.trim();
+    if (!callbackUrl) {
+      res.status(500).json({ success: false, message: "M-Pesa callback URL is not configured." });
+      return;
+    }
 
-    const paystackRes = await initializePayment({
-      email,
+    const mpesaRes = await initiateStkPush({
       amount: total,
-      reference: paystackRef,
-      currency: "KES",
+      phone: customer.phone,
+      accountReference: orderNumber,
+      transactionDesc: `Payment for D-Daily order ${orderNumber}`,
       callbackUrl,
-      metadata,
     });
 
-    // Create order in DB (pending_payment)
     const order = await Order.create({
       orderNumber,
       customer: storedCustomer,
@@ -101,17 +90,16 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
       notes,
       status: "pending_payment",
       payment: {
-        provider: "paystack",
-        reference: paystackRef,
-        authorizationUrl: paystackRes?.data?.authorization_url,
-        accessCode: paystackRes?.data?.access_code,
+        provider: "mpesa",
+        reference: mpesaRef,
+        checkoutRequestID: mpesaRes.CheckoutRequestID,
+        merchantRequestID: mpesaRes.MerchantRequestID,
+        customerPhone: customer.phone,
       },
     });
 
-    // Send pending-payment email to the customer so they are reminded to complete payment.
     if (customer.email) {
-      const paymentUrl = paystackRes?.data?.authorization_url;
-      queueOrderConfirmationEmail(customer.email, order, paymentUrl).catch((err) => {
+      queueOrderConfirmationEmail(customer.email, order).catch((err) => {
         console.error("Error queueing pending order confirmation email:", err);
       });
     }
@@ -137,9 +125,10 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           status: order.status,
         },
         payment: {
-          authorizationUrl: paystackRes.data.authorization_url,
-          reference: paystackRef,
-          accessCode: paystackRes.data.access_code,
+          reference: mpesaRef,
+          checkoutRequestID: mpesaRes.CheckoutRequestID,
+          merchantRequestID: mpesaRes.MerchantRequestID,
+          message: mpesaRes.CustomerMessage,
         },
       },
     });
@@ -149,68 +138,17 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-/** GET /api/orders/verify/:reference — Verify Paystack payment after redirect */
+/** GET /api/orders/verify/:reference — Verify order payment status */
 export const verifyOrder = async (req: Request<{ reference: string }>, res: Response): Promise<void> => {
   try {
     const referenceParam = req.params.reference;
     const reference = Array.isArray(referenceParam) ? referenceParam[0] : referenceParam;
 
-    const verification = await verifyPayment(reference);
-
-    if (!verification.data || verification.data.status !== "success") {
-      res.status(400).json({
-        success: false,
-        message: "Payment not successful",
-        paymentStatus: verification.data?.status,
-      });
-      return;
-    }
-
-    // Update order status to paid
-    const order = await Order.findOneAndUpdate(
-      { "payment.reference": reference, status: "pending_payment" },
-      {
-        $set: {
-          status: "paid",
-          "payment.paidAt": new Date(verification.data.paid_at),
-          "payment.channel": verification.data.channel,
-          "payment.paystackRef": verification.data.reference,
-        },
-      },
-      { new: true }
-    );
-
+    const order = await Order.findOne({ "payment.reference": reference });
     if (!order) {
-      const existingOrder = await Order.findOne({ "payment.reference": reference });
-      if (existingOrder) {
-        res.json({
-          success: true,
-          data: {
-            orderNumber: existingOrder.orderNumber,
-            status: existingOrder.status,
-            total: existingOrder.total,
-            paidAt: existingOrder.payment?.paidAt,
-          },
-        });
-        return;
-      }
-
       res.status(404).json({ success: false, message: "Order not found for this reference" });
       return;
     }
-
-    if (order.customer?.email) {
-      queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
-        console.error("Error queueing paid confirmation email:", err);
-      });
-    }
-
-    queueAdminNotification(
-      `Order paid — ${order.orderNumber}`,
-      renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
-    ).catch((err) => {
-      console.error("Failed to queue admin notification for paid order:", err);
-    });
 
     res.json({
       success: true,
@@ -218,76 +156,60 @@ export const verifyOrder = async (req: Request<{ reference: string }>, res: Resp
         orderNumber: order.orderNumber,
         status: order.status,
         total: order.total,
-        paidAt: order.payment.paidAt,
+        paidAt: order.payment?.paidAt,
       },
     });
   } catch (err) {
     console.error("Verify order error:", err);
-    res.status(500).json({ success: false, message: "Failed to verify payment" });
+    res.status(500).json({ success: false, message: "Failed to verify payment status" });
   }
 };
 
-/** POST /api/orders/webhook — Paystack webhook handler */
-export const paystackWebhook = async (req: Request, res: Response): Promise<void> => {
+/** POST /api/orders/webhook — M-Pesa webhook handler */
+export const mpesaWebhook = async (req: Request, res: Response): Promise<void> => {
   try {
-    const signatureHeader = req.headers["x-paystack-signature"];
-    const secret = process.env.PAYSTACK_SECRET_KEY as string;
-    const rawBody = req.body as Buffer;
+    const callbackPayload = parseStkCallback(req.body);
 
-    if (!signatureHeader || typeof signatureHeader !== "string") {
-      res.status(400).json({ message: "Missing Paystack signature" });
+    if (callbackPayload.resultCode !== 0) {
+      console.warn("M-Pesa STK callback returned non-zero result code:", callbackPayload);
+      res.sendStatus(200);
       return;
     }
 
-    if (!secret) {
-      res.status(500).json({ message: "Paystack secret not configured" });
-      return;
-    }
-
-    const computedHash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
-    const actualSignature = Buffer.from(signatureHeader, "utf8");
-    const expectedSignature = Buffer.from(computedHash, "utf8");
-
-    if (actualSignature.length !== expectedSignature.length || !crypto.timingSafeEqual(actualSignature, expectedSignature)) {
-      res.status(401).json({ message: "Invalid signature" });
-      return;
-    }
-
-    const payload = JSON.parse(rawBody.toString("utf8"));
-    const { event, data } = payload;
-
-    if (event === "charge.success") {
-      const order = await Order.findOneAndUpdate(
-        { "payment.reference": data.reference, status: { $ne: "paid" } },
-        {
-          $set: {
-            status: "paid",
-            "payment.paidAt": new Date(data.paid_at),
-            "payment.channel": data.channel,
-            "payment.paystackRef": data.reference,
-          },
+    const order = await Order.findOneAndUpdate(
+      { "payment.checkoutRequestID": callbackPayload.checkoutRequestID, status: { $ne: "paid" } },
+      {
+        $set: {
+          status: "paid",
+          "payment.paidAt": new Date(),
+          "payment.channel": "mpesa",
+          "payment.merchantRequestID": callbackPayload.merchantRequestID,
+          "payment.receiptNumber": callbackPayload.receiptNumber,
+          "payment.amount": callbackPayload.amount,
+          "payment.phoneNumber": callbackPayload.phoneNumber,
         },
-        { new: true }
-      );
-      if (order?.customer?.email) {
-        queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
-          console.error("Error queueing webhook-paid confirmation email:", err);
-        });
-      }
+      },
+      { new: true }
+    );
 
-      if (order) {
-        queueAdminNotification(
-          `Order paid — ${order.orderNumber}`,
-          renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
-        ).catch((err) => {
-          console.error("Failed to queue admin notification for webhook-paid order:", err);
-        });
-      }
+    if (order?.customer?.email) {
+      queueOrderConfirmationEmail(order.customer.email, order).catch((err) => {
+        console.error("Error queueing webhook-paid confirmation email:", err);
+      });
+    }
+
+    if (order) {
+      queueAdminNotification(
+        `Order paid — ${order.orderNumber}`,
+        renderAdminNotification("order", { ...order.toObject?.() ?? order, status: order.status })
+      ).catch((err) => {
+        console.error("Failed to queue admin notification for webhook-paid order:", err);
+      });
     }
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("Webhook error:", err);
+    console.error("M-Pesa webhook error:", err);
     res.sendStatus(500);
   }
 };
@@ -410,42 +332,7 @@ export const updateOrderStatus = async (req: Request<{ orderNumber: string }>, r
   }
 };
 
-async function resolvePaymentUrl(order: any): Promise<string | undefined> {
-  if (order.payment?.authorizationUrl) return order.payment.authorizationUrl;
-  if (!order.payment?.reference) return undefined;
-
-  const callbackUrl = `${process.env.FRONTEND_URL}/checkout/verify?ref=${order.payment.reference}`;
-  const email = order.customer?.email || `${order.customer?.phone?.replace(/\s/g, "") || "guest"}@ddaily.co.ke`;
-
-  const paystackRes = await initializePayment({
-    email,
-    amount: order.total,
-    reference: order.payment.reference,
-    currency: "KES",
-    callbackUrl,
-    metadata: {
-      orderNumber: order.orderNumber,
-      customerName: order.customer?.name,
-      ...(order.customer?.phone ? { customerPhone: order.customer.phone } : {}),
-      ...(order.customer?.email ? { customerEmail: order.customer.email } : {}),
-    },
-  });
-
-  const paymentUrl = paystackRes?.data?.authorization_url;
-  if (paymentUrl) {
-    await Order.updateOne(
-      { orderNumber: order.orderNumber },
-      {
-        $set: {
-          "payment.authorizationUrl": paymentUrl,
-          "payment.accessCode": paystackRes.data.access_code,
-        },
-      }
-    );
-  }
-
-  return paymentUrl;
-}
+// Payment reminders do not require a retry URL for M-Pesa. Reminders are sent via email with order details and next steps.
 
 export const sendOrderPaymentReminder = async (req: Request<{ orderNumber: string }>, res: Response): Promise<void> => {
   try {
@@ -467,13 +354,7 @@ export const sendOrderPaymentReminder = async (req: Request<{ orderNumber: strin
       return;
     }
 
-    const paymentUrl = await resolvePaymentUrl(order);
-    if (!paymentUrl) {
-      res.status(500).json({ success: false, message: "Unable to resolve payment URL" });
-      return;
-    }
-
-    await queueOrderPaymentReminderEmail(to, order, paymentUrl);
+    await queueOrderPaymentReminderEmail(to, order, order.payment?.authorizationUrl);
     res.json({ success: true, message: "Payment reminder email sent" });
   } catch (err) {
     console.error("Payment reminder error:", err);

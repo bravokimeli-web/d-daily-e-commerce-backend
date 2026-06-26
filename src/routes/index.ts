@@ -18,7 +18,7 @@ import {
   getAllOrders,
   deleteOrder,
   updateOrderStatus,
-  paystackWebhook,
+  mpesaWebhook,
   sendOrderPaymentReminder,
   sendOrderShippedNotification,
   sendOrderDeliveredNotification,
@@ -194,8 +194,8 @@ router.post("/admin/orders/:orderNumber/email/payment-reminder", requireAdmin, s
 router.post("/admin/orders/:orderNumber/email/shipped", requireAdmin, sendOrderShippedNotification);
 router.post("/admin/orders/:orderNumber/email/delivered", requireAdmin, sendOrderDeliveredNotification);
 
-// ─── Paystack webhook (raw body, no auth — Paystack signs its own requests) ───
-router.post("/webhooks/paystack", paystackWebhook);
+// ─── M-Pesa webhook (Daraja STK Push callback) ───────────────────────────────
+router.post("/webhooks/mpesa", mpesaWebhook);
 
 // ─── Admin auth ───────────────────────────────────────────────────────────────
 router.post("/admin/login", loginLimiter, adminLogin);

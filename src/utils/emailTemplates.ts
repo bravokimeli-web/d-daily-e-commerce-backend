@@ -29,6 +29,10 @@ export function renderOrderConfirmation(order: any, paymentUrl?: string) {
     ? `<p><a href="${escapeHtml(paymentUrl)}" style="background: #ff6d00; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Payment Now</a></p>`
     : "";
 
+  const mpesaInstructions = status === "pending_payment" && order.payment?.provider === "mpesa" && order.payment.customerPhone
+    ? `<p>Please check the phone number ${escapeHtml(order.payment.customerPhone)} for the M-Pesa STK push prompt to complete your payment.</p>`
+    : "";
+
   return `
   <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
     <h2>${statusLabel[status] || "Order update"}</h2>
@@ -41,14 +45,14 @@ export function renderOrderConfirmation(order: any, paymentUrl?: string) {
       ${items}
     </ul>
     <p style="background: #fff3cd; padding: 10px; border-left: 4px solid #ff6d00; margin: 15px 0;"><strong>Total Amount: KES ${Number(order.total).toLocaleString()}</strong></p>
-    ${paymentButton}
+    ${mpesaInstructions || paymentButton}
     <p>Questions? Contact us anytime.</p>
     <p><strong>D-Daily Ltd Team</strong></p>
   </div>
   `;
 }
 
-export function renderOrderPaymentReminder(order: any, paymentUrl: string) {
+export function renderOrderPaymentReminder(order: any, paymentUrl?: string) {
   const items = (order.items || [])
     .map((it: any) => `<li>${escapeHtml(it.name)} &times; ${it.qty} — KES ${Number(it.price).toLocaleString()}</li>`)
     .join("\n");
@@ -67,7 +71,7 @@ export function renderOrderPaymentReminder(order: any, paymentUrl: string) {
       ${items}
     </ul>
     <p style="background: #fff3cd; padding: 10px; border-left: 4px solid #ff6d00; margin: 15px 0;"><strong>Total Amount: KES ${Number(order.total).toLocaleString()}</strong></p>
-    <p><a href="${escapeHtml(paymentUrl)}" style="background: #ff6d00; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Payment Now</a></p>
+    ${order.payment?.provider === "mpesa" && order.payment.customerPhone ? `<p>Please check the phone number ${escapeHtml(order.payment.customerPhone)} for the M-Pesa STK push prompt.</p>` : paymentUrl ? `<p><a href="${escapeHtml(paymentUrl)}" style="background: #ff6d00; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Payment Now</a></p>` : ""}
     <p>If you have questions or need help, reply to this email.</p>
     <p><strong>D-Daily Ltd Team</strong></p>
   </div>

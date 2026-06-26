@@ -35,13 +35,18 @@ export interface IOrder extends Document {
   courier: string;
   status: OrderStatus;
   payment: {
-    provider: "paystack";
+    provider: "mpesa";
     reference?: string;
+    checkoutRequestID?: string;
+    merchantRequestID?: string;
+    receiptNumber?: string;
+    amount?: number;
+    customerPhone?: string;
+    phoneNumber?: string;
+    paidAt?: Date;
+    channel?: string; // mpesa, card, mobile_money, bank_transfer
     authorizationUrl?: string;
     accessCode?: string;
-    paystackRef?: string;
-    paidAt?: Date;
-    channel?: string; // card, mobile_money, bank_transfer
   };
   notes?: string;
   createdAt: Date;
@@ -77,13 +82,18 @@ const OrderSchema = new Schema<IOrder>(
       default: "pending_payment",
     },
     payment: {
-      provider: { type: String, default: "paystack" },
+      provider: { type: String, default: "mpesa" },
       reference: { type: String },
-      authorizationUrl: { type: String },
-      accessCode: { type: String },
-      paystackRef: { type: String },
+      checkoutRequestID: { type: String },
+      merchantRequestID: { type: String },
+      receiptNumber: { type: String },
+      amount: { type: Number },
+      customerPhone: { type: String },
+      phoneNumber: { type: String },
       paidAt: { type: Date },
       channel: { type: String },
+      authorizationUrl: { type: String },
+      accessCode: { type: String },
     },
     notes: { type: String },
   },

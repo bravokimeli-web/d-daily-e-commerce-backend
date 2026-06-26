@@ -74,9 +74,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // ─── Body parsing ──────────────────────────────────────────────────────────────
-// Raw body for Paystack webhook signature verification
-app.use("/api/webhooks/paystack", express.raw({ type: "application/json", limit: "1mb" }));
-// JSON for everything else
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 

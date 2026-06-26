@@ -27,7 +27,7 @@ export async function queueOrderConfirmationEmail(to: string, order: any, paymen
   await sendOrderConfirmation(to, order, paymentUrl);
 }
 
-export async function queueOrderPaymentReminderEmail(to: string, order: any, paymentUrl: string) {
+export async function queueOrderPaymentReminderEmail(to: string, order: any, paymentUrl?: string) {
   if (emailQueue) {
     await emailQueue.add(
       "order_payment_reminder",
