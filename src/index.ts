@@ -7,6 +7,7 @@ import { connectDB } from "./config/db";
 import routes from "./routes";
 import seoRoutes from "./routes/seo";
 import { UPLOADS_DIR } from "./paths";
+import { validateMpesaConfig } from "./utils/mpesa";
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
@@ -107,6 +108,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // ─── Start ────────────────────────────────────────────────────────────────────
 const start = async () => {
   await connectDB();
+  validateMpesaConfig();
   app.listen(PORT, () => {
     console.log(`🚀 D-Daily backend running at http://localhost:${PORT}`);
     console.log(`📦 Environment: ${process.env.NODE_ENV ?? "development"}`);

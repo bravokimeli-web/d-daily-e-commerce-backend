@@ -140,6 +140,7 @@ export const createOrder = async (req: Request, res: Response): Promise<void> =>
           checkoutRequestID: mpesaRes.CheckoutRequestID,
           merchantRequestID: mpesaRes.MerchantRequestID,
           message: mpesaRes.CustomerMessage,
+          customerPhone: mpesaPhone || customer.phone,
         },
       },
     });

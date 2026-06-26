@@ -1,12 +1,43 @@
 import axios from "axios";
 
-const MPESA_BASE_URL = process.env.MPESA_BASE_URL?.trim() || "https://sandbox.safaricom.co.ke";
+const MPESA_PRODUCTION_URL = "https://api.safaricom.co.ke";
+const MPESA_SANDBOX_URL = "https://sandbox.safaricom.co.ke";
+
+const MPESA_BASE_URL =
+  process.env.MPESA_BASE_URL?.trim() ||
+  (process.env.NODE_ENV === "production" ? MPESA_PRODUCTION_URL : MPESA_SANDBOX_URL);
 const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY?.trim();
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET?.trim();
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE?.trim();
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY?.trim();
 const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL?.trim();
 const MPESA_TRANSACTION_TYPE = process.env.MPESA_TRANSACTION_TYPE?.trim() || "CustomerPayBillOnline";
+
+export function validateMpesaConfig(): void {
+  const missing: string[] = [];
+  if (!MPESA_CONSUMER_KEY) missing.push("MPESA_CONSUMER_KEY");
+  if (!MPESA_CONSUMER_SECRET) missing.push("MPESA_CONSUMER_SECRET");
+  if (!MPESA_SHORTCODE) missing.push("MPESA_SHORTCODE");
+  if (!MPESA_PASSKEY) missing.push("MPESA_PASSKEY");
+  if (!MPESA_CALLBACK_URL) missing.push("MPESA_CALLBACK_URL");
+
+  if (missing.length > 0) {
+    console.error(`M-Pesa config incomplete — missing: ${missing.join(", ")}`);
+    return;
+  }
+
+  const isSandbox = MPESA_BASE_URL.includes("sandbox");
+  if (process.env.NODE_ENV === "production" && isSandbox) {
+    console.error(
+      "M-Pesa is pointed at SANDBOX in production. Set MPESA_BASE_URL=https://api.safaricom.co.ke and use production Daraja credentials."
+    );
+    return;
+  }
+
+  console.log(
+    `M-Pesa ready (${isSandbox ? "sandbox" : "production"}) — shortcode ${MPESA_SHORTCODE}, type ${MPESA_TRANSACTION_TYPE}`
+  );
+}
 
 export interface MpesaAccessTokenResponse {
   access_token: string;
@@ -128,9 +159,13 @@ export const initiateStkPush = async (params: {
     PartyB: MPESA_SHORTCODE,
     PhoneNumber: normalizedPhone,
     CallBackURL: callbackUrl,
-    AccountReference: params.accountReference,
-    TransactionDesc: params.transactionDesc,
+    AccountReference: params.accountReference.slice(0, 12),
+    TransactionDesc: params.transactionDesc.slice(0, 13),
   };
+
+  console.log(
+    `Initiating M-Pesa STK push — phone 254***${normalizedPhone.slice(-4)}, amount KES ${payload.Amount}, env ${MPESA_BASE_URL.includes("sandbox") ? "sandbox" : "production"}`
+  );
 
   try {
     const response = await axios.post<MpesaStkPushResponse>(

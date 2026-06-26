@@ -9,14 +9,24 @@ services:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
-        sync: false # Set this in Render dashboard
-      - key: PAYSTACK_SECRET_KEY
-        sync: false # Set this in Render dashboard
-      - key: PAYSTACK_PUBLIC_KEY
-        sync: false # Set this in Render dashboard
+        sync: false
+      - key: MPESA_BASE_URL
+        value: https://api.safaricom.co.ke
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        value: https://api.ddaily.co.ke/api/webhooks/mpesa
+      - key: MPESA_TRANSACTION_TYPE
+        value: CustomerPayBillOnline
       - key: FRONTEND_URL
-        value: https://d-daily-frontend.vercel.app
+        value: https://www.ddaily.co.ke
       - key: JWT_SECRET
-        sync: false # Set this in Render dashboard
+        sync: false
       - key: JWT_EXPIRES_IN
         value: 180d
