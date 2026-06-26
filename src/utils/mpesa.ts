@@ -1,3 +1,25 @@
+/**
+ * Safaricom Daraja — Lipa Na M-Pesa Online (M-Pesa Express / STK Push)
+ *
+ * Official flow:
+ * 1. OAuth token  → GET  {base}/oauth/v1/generate?grant_type=client_credentials
+ * 2. STK Push     → POST {base}/mpesa/stkpush/v1/processrequest
+ * 3. STK Query    → POST {base}/mpesa/stkpushquery/v1/query
+ * 4. Callback     → POST your CallBackURL (webhook)
+ *
+ * Parameter definitions (Safaricom Daraja Lipa Na M-Pesa Online API):
+ * - BusinessShortCode: Lipa Na M-Pesa Online shortcode from your Daraja Production app
+ * - Password:          base64( BusinessShortCode + Passkey + Timestamp )
+ * - Timestamp:         Africa/Nairobi, format YYYYMMDDHHmmss
+ * - TransactionType:   CustomerBuyGoodsOnline (till) | CustomerPayBillOnline (paybill)
+ * - PartyA:            customer phone, MSISDN 254XXXXXXXXX (12 digits)
+ * - PartyB:            same value as BusinessShortCode
+ * - PhoneNumber:       same value as PartyA (receives the STK prompt)
+ * - AccountReference:  max 12 characters
+ * - TransactionDesc:   max 13 characters
+ *
+ * Ref: developer.safaricom.co.ke → Lipa Na M-Pesa Online → STK Push API
+ */
 import axios from "axios";
 
 const MPESA_PRODUCTION_URL = "https://api.safaricom.co.ke";
@@ -13,6 +35,8 @@ const MPESA_PASSKEY = process.env.MPESA_PASSKEY?.trim();
 const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL?.trim();
 const MPESA_TRANSACTION_TYPE = process.env.MPESA_TRANSACTION_TYPE?.trim() || "CustomerPayBillOnline";
 
+const VALID_TRANSACTION_TYPES = new Set(["CustomerPayBillOnline", "CustomerBuyGoodsOnline"]);
+
 export function getMpesaConfigInfo() {
   const isSandbox = MPESA_BASE_URL.includes("sandbox");
   const missing: string[] = [];
@@ -23,9 +47,11 @@ export function getMpesaConfigInfo() {
   if (!MPESA_CALLBACK_URL) missing.push("MPESA_CALLBACK_URL");
 
   let warning: string | null = null;
-  if (process.env.NODE_ENV === "production" && isSandbox) {
+  if (!VALID_TRANSACTION_TYPES.has(MPESA_TRANSACTION_TYPE)) {
+    warning = `Invalid MPESA_TRANSACTION_TYPE "${MPESA_TRANSACTION_TYPE}". Use CustomerBuyGoodsOnline (till) or CustomerPayBillOnline (paybill).`;
+  } else if (process.env.NODE_ENV === "production" && isSandbox) {
     warning =
-      "Production server is using M-Pesa SANDBOX. Real phone numbers will NOT receive payment prompts. Set MPESA_BASE_URL=https://api.safaricom.co.ke and use production Daraja credentials.";
+      "Production server is using M-Pesa SANDBOX. Set MPESA_BASE_URL=https://api.safaricom.co.ke and use production Daraja credentials.";
   } else if (isSandbox) {
     warning = "Sandbox mode — only Safaricom test numbers (e.g. 254708374149) receive STK prompts.";
   }
@@ -48,12 +74,6 @@ export function validateMpesaConfig(): void {
   if (info.missing.length > 0) {
     console.error(`M-Pesa config incomplete — missing: ${info.missing.join(", ")}`);
     return;
-  }
-
-  if (info.transactionType === "CustomerPayBillOnline") {
-    console.warn(
-      "M-Pesa transaction type is CustomerPayBillOnline (paybill). For a till number, set MPESA_TRANSACTION_TYPE=CustomerBuyGoodsOnline on Render."
-    );
   }
 
   if (info.warning) {
@@ -88,11 +108,16 @@ const STK_FAILURE_MESSAGES: Record<number, string> = {
 };
 
 export function describeStkResult(resultCode: number, resultDesc?: string): string {
+  const desc = resultDesc?.toLowerCase() ?? "";
+  if (desc.includes("agent number") && desc.includes("store number")) {
+    return (
+      "Safaricom rejected the till configuration. On Render, MPESA_SHORTCODE and MPESA_PASSKEY must both come from the same Daraja Production app (Lipa na Mpesa Online). Remove any MPESA_TILL_NUMBER variable if you added one."
+    );
+  }
   return STK_FAILURE_MESSAGES[resultCode] || resultDesc || "M-Pesa payment was not completed.";
 }
 
 export function isLikelySandboxCheckoutId(checkoutRequestID: string): boolean {
-  // Sandbox CheckoutRequestIDs often embed the customer phone digits at the end.
   return /ws_CO_\d{14}\d{9,10}$/.test(checkoutRequestID);
 }
 
@@ -137,6 +162,7 @@ async function getAccessToken(): Promise<string> {
   }
 }
 
+/** Daraja: PartyA and PhoneNumber must be MSISDN 254XXXXXXXXX (12 digits). */
 function normalizePhoneNumber(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.startsWith("0") && digits.length === 10) {
@@ -167,14 +193,7 @@ function getTimestamp(): string {
   const parts = formatter.formatToParts(now);
   const getPart = (type: string) => parts.find((p) => p.type === type)?.value || "";
 
-  const year = getPart("year");
-  const month = getPart("month");
-  const day = getPart("day");
-  const hour = getPart("hour");
-  const minute = getPart("minute");
-  const second = getPart("second");
-
-  return `${year}${month}${day}${hour}${minute}${second}`;
+  return `${getPart("year")}${getPart("month")}${getPart("day")}${getPart("hour")}${getPart("minute")}${getPart("second")}`;
 }
 
 function getPassword(timestamp: string): string {
@@ -198,6 +217,16 @@ export const initiateStkPush = async (params: {
     );
   }
 
+  if (!MPESA_SHORTCODE) {
+    throw new Error("Missing MPESA_SHORTCODE — use the Lipa Na M-Pesa Online shortcode from your Daraja Production app.");
+  }
+
+  if (!VALID_TRANSACTION_TYPES.has(MPESA_TRANSACTION_TYPE)) {
+    throw new Error(
+      `Invalid MPESA_TRANSACTION_TYPE "${MPESA_TRANSACTION_TYPE}". Use CustomerBuyGoodsOnline for a till or CustomerPayBillOnline for a paybill.`
+    );
+  }
+
   const normalizedPhone = normalizePhoneNumber(params.phone);
   const token = await getAccessToken();
   const timestamp = getTimestamp();
@@ -208,6 +237,7 @@ export const initiateStkPush = async (params: {
     throw new Error("Missing MPESA callback URL. Set MPESA_CALLBACK_URL in the environment.");
   }
 
+  // Daraja Lipa Na M-Pesa Online: PartyB is the same shortcode as BusinessShortCode.
   const payload = {
     BusinessShortCode: MPESA_SHORTCODE,
     Password: password,
@@ -223,7 +253,7 @@ export const initiateStkPush = async (params: {
   };
 
   console.log(
-    `Initiating M-Pesa STK push — phone 254***${normalizedPhone.slice(-4)}, amount KES ${payload.Amount}, env ${MPESA_BASE_URL.includes("sandbox") ? "sandbox" : "production"}`
+    `Initiating Daraja STK push — customer 254***${normalizedPhone.slice(-4)}, amount KES ${payload.Amount}, shortcode ***${MPESA_SHORTCODE.slice(-4)}, type ${MPESA_TRANSACTION_TYPE}`
   );
 
   try {
@@ -246,12 +276,8 @@ export const initiateStkPush = async (params: {
     }
 
     if (process.env.NODE_ENV === "production" && isLikelySandboxCheckoutId(data.CheckoutRequestID)) {
-      console.error(
-        "M-Pesa STK response looks like SANDBOX (checkout ID embeds phone). Real numbers will not receive prompts.",
-        data.CheckoutRequestID
-      );
       throw new Error(
-        "M-Pesa is still running in sandbox mode. On Render, set MPESA_BASE_URL=https://api.safaricom.co.ke and replace sandbox keys with production Daraja credentials."
+        "M-Pesa is still running in sandbox mode. On Render, set MPESA_BASE_URL=https://api.safaricom.co.ke and use production Daraja credentials."
       );
     }
 
