@@ -25,7 +25,7 @@ function normalizePhoneNumber(phone: string): string {
   if (digits.startsWith("0") && digits.length === 10) {
     return `254${digits.slice(1)}`;
   }
-  if (digits.startsWith("7") && digits.length === 9) {
+  if ((digits.startsWith("7") || digits.startsWith("1")) && digits.length === 9) {
     return `254${digits}`;
   }
   if (digits.startsWith("254") && digits.length === 12) {
@@ -36,13 +36,28 @@ function normalizePhoneNumber(phone: string): string {
 
 function getTimestamp(): string {
   const now = new Date();
-  const year = now.getUTCFullYear().toString();
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(now.getUTCDate()).padStart(2, "0");
-  const hours = String(now.getUTCHours()).padStart(2, "0");
-  const minutes = String(now.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(now.getUTCSeconds()).padStart(2, "0");
-  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+
+  const parts = formatter.formatToParts(now);
+  const getPart = (type: string) => parts.find((p) => p.type === type)?.value || "";
+
+  const year = getPart("year");
+  const month = getPart("month");
+  const day = getPart("day");
+  const hour = getPart("hour");
+  const minute = getPart("minute");
+  const second = getPart("second");
+
+  return `${year}${month}${day}${hour}${minute}${second}`;
 }
 
 async function getAccessToken(): Promise<string> {
