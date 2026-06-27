@@ -13,7 +13,9 @@
  * - Timestamp:         Africa/Nairobi, format YYYYMMDDHHmmss
  * - TransactionType:   CustomerBuyGoodsOnline (till) | CustomerPayBillOnline (paybill)
  * - PartyA:            customer phone, MSISDN 254XXXXXXXXX (12 digits)
- * - PartyB:            same value as BusinessShortCode
+ * - PartyB:            same as BusinessShortCode for paybill; for Buy Goods till,
+ *                      use the customer-facing till number (MPESA_PARTY_B) when it
+ *                      differs from the Daraja Lipa Na M-Pesa shortcode
  * - PhoneNumber:       same value as PartyA (receives the STK prompt)
  * - AccountReference:  max 12 characters
  * - TransactionDesc:   max 13 characters
@@ -31,11 +33,28 @@ const MPESA_BASE_URL =
 const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY?.trim();
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET?.trim();
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE?.trim();
+const MPESA_PARTY_B = process.env.MPESA_PARTY_B?.trim();
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY?.trim();
 const MPESA_CALLBACK_URL = process.env.MPESA_CALLBACK_URL?.trim();
-const MPESA_TRANSACTION_TYPE = process.env.MPESA_TRANSACTION_TYPE?.trim() || "CustomerPayBillOnline";
+const MPESA_TRANSACTION_TYPE = process.env.MPESA_TRANSACTION_TYPE?.trim() || "CustomerBuyGoodsOnline";
 
 const VALID_TRANSACTION_TYPES = new Set(["CustomerPayBillOnline", "CustomerBuyGoodsOnline"]);
+
+function getPartyB(): string {
+  if (MPESA_TRANSACTION_TYPE === "CustomerBuyGoodsOnline" && MPESA_PARTY_B) {
+    return MPESA_PARTY_B;
+  }
+  return MPESA_SHORTCODE || "";
+}
+
+function asMpesaDigits(value: string): number {
+  const digits = value.replace(/\D/g, "");
+  const parsed = Number(digits);
+  if (!digits || !Number.isFinite(parsed)) {
+    throw new Error("Invalid M-Pesa numeric field.");
+  }
+  return parsed;
+}
 
 export function getMpesaConfigInfo() {
   const isSandbox = MPESA_BASE_URL.includes("sandbox");
@@ -60,6 +79,8 @@ export function getMpesaConfigInfo() {
     environment: isSandbox ? "sandbox" : "production",
     baseUrl: MPESA_BASE_URL,
     shortcodeSuffix: MPESA_SHORTCODE ? MPESA_SHORTCODE.slice(-4) : null,
+    partyBSuffix: getPartyB() ? getPartyB().slice(-4) : null,
+    partyBSameAsShortcode: !MPESA_PARTY_B || MPESA_PARTY_B === MPESA_SHORTCODE,
     transactionType: MPESA_TRANSACTION_TYPE,
     callbackUrl: MPESA_CALLBACK_URL ?? null,
     credentialsConfigured: missing.length === 0,
@@ -108,12 +129,17 @@ const STK_FAILURE_MESSAGES: Record<number, string> = {
 };
 
 export function describeStkResult(resultCode: number, resultDesc?: string): string {
-  const desc = resultDesc?.toLowerCase() ?? "";
-  if (desc.includes("agent number") && desc.includes("store number")) {
+  if (resultCode === 2002) {
     return (
-      "Safaricom rejected the till configuration. On Render, MPESA_SHORTCODE and MPESA_PASSKEY must both come from the same Daraja Production app (Lipa na Mpesa Online). Remove any MPESA_TILL_NUMBER variable if you added one."
+      "Safaricom error 2002: till store/agent mismatch. Keep MPESA_SHORTCODE and MPESA_PASSKEY from your Daraja Production app. If you use a business till, set MPESA_PARTY_B to the till number customers pay (find it via *234# → M-PESA Business Till → Query my till). It may differ from the Daraja short code."
     );
   }
+
+  const desc = resultDesc?.toLowerCase() ?? "";
+  if (desc.includes("agent number") && desc.includes("store number")) {
+    return describeStkResult(2002, resultDesc);
+  }
+
   return STK_FAILURE_MESSAGES[resultCode] || resultDesc || "M-Pesa payment was not completed.";
 }
 
@@ -237,23 +263,28 @@ export const initiateStkPush = async (params: {
     throw new Error("Missing MPESA callback URL. Set MPESA_CALLBACK_URL in the environment.");
   }
 
-  // Daraja Lipa Na M-Pesa Online: PartyB is the same shortcode as BusinessShortCode.
+  const partyB = getPartyB();
+  if (!partyB) {
+    throw new Error("Missing MPESA_SHORTCODE.");
+  }
+
+  // Daraja Lipa Na M-Pesa Online payload (numeric fields per API examples).
   const payload = {
-    BusinessShortCode: MPESA_SHORTCODE,
+    BusinessShortCode: asMpesaDigits(MPESA_SHORTCODE),
     Password: password,
     Timestamp: timestamp,
     TransactionType: MPESA_TRANSACTION_TYPE,
     Amount: Math.round(params.amount),
-    PartyA: normalizedPhone,
-    PartyB: MPESA_SHORTCODE,
-    PhoneNumber: normalizedPhone,
+    PartyA: asMpesaDigits(normalizedPhone),
+    PartyB: asMpesaDigits(partyB),
+    PhoneNumber: asMpesaDigits(normalizedPhone),
     CallBackURL: callbackUrl,
     AccountReference: params.accountReference.slice(0, 12),
     TransactionDesc: params.transactionDesc.slice(0, 13),
   };
 
   console.log(
-    `Initiating Daraja STK push — customer 254***${normalizedPhone.slice(-4)}, amount KES ${payload.Amount}, shortcode ***${MPESA_SHORTCODE.slice(-4)}, type ${MPESA_TRANSACTION_TYPE}`
+    `Initiating Daraja STK push — customer 254***${normalizedPhone.slice(-4)}, amount KES ${payload.Amount}, shortcode ***${MPESA_SHORTCODE.slice(-4)}, partyB ***${partyB.slice(-4)}, type ${MPESA_TRANSACTION_TYPE}`
   );
 
   try {
@@ -302,7 +333,7 @@ export const queryStkPushStatus = async (checkoutRequestID: string): Promise<Mpe
   const response = await axios.post<MpesaStkQueryResponse>(
     `${MPESA_BASE_URL}/mpesa/stkpushquery/v1/query`,
     {
-      BusinessShortCode: MPESA_SHORTCODE,
+      BusinessShortCode: asMpesaDigits(MPESA_SHORTCODE!),
       Password: password,
       Timestamp: timestamp,
       CheckoutRequestID: checkoutRequestID,
