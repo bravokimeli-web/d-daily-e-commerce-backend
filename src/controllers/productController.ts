@@ -94,8 +94,11 @@ export const uploadProductImage = (req: Request, res: Response, next: NextFuncti
 
 /** After uploadProductImage — responds with public path stored on Product.image */
 export const completeProductImageUpload = async (req: Request, res: Response): Promise<void> => {
-  const file = req.file as Express.Multer.File & { path?: string; filename?: string };
-  if (!file?.path || !file?.filename) {
+  const file = req.file as any;
+  const path = file?.path || file?.secure_url || file?.url;
+  const filename = file?.filename || file?.public_id;
+
+  if (!path || !filename) {
     res.status(400).json({ success: false, message: "No image file received" });
     return;
   }
@@ -110,8 +113,8 @@ export const completeProductImageUpload = async (req: Request, res: Response): P
   }
 
   try {
-    const publicId = file.filename;
-    const secureUrl = file.path;
+    const publicId = filename;
+    const secureUrl = path;
     const isVideo = file.mimetype.startsWith("video/");
 
     const variants = isVideo
