@@ -21,7 +21,7 @@ cloudinary.config({
 });
 
 const productImageStorage = new CloudinaryStorage({
-  cloudinary,
+  cloudinary: { v2: cloudinary } as any,
   params: (_req: Express.Request, _file: Express.Multer.File, cb: (err: any, params: any) => void) => {
     cb(null, {
       folder: "d-daily/products",
