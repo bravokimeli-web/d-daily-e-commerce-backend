@@ -7,12 +7,18 @@ declare module "multer-storage-cloudinary" {
     folder?: string;
     format?: string | ((req: any, file: any) => string);
     public_id?: (req: any, file: any) => string;
-    params?: (req: any, file: any) => {
-      folder?: string;
-      resource_type?: string;
-      public_id?: string;
-      [key: string]: any;
-    };
+    params?:
+      | {
+          folder?: string;
+          resource_type?: string;
+          public_id?: string;
+          [key: string]: any;
+        }
+      | ((
+          req: any,
+          file: any,
+          callback: (error: any, params: any) => void
+        ) => void);
   }
 
   class CloudinaryStorage implements StorageEngine {

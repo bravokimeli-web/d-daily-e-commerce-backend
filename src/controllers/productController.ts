@@ -22,12 +22,13 @@ cloudinary.config({
 
 const productImageStorage = new CloudinaryStorage({
   cloudinary,
-  params: (_req: Express.Request, _file: Express.Multer.File) =>
-    ({
+  params: (_req: Express.Request, _file: Express.Multer.File, cb: (err: any, params: any) => void) => {
+    cb(null, {
       folder: "d-daily/products",
       resource_type: "auto",
       public_id: `${Date.now()}-${Math.round(Math.random() * 1e9)}`,
-    } as any),
+    });
+  },
 });
 
 const productImageMulter = multer({
